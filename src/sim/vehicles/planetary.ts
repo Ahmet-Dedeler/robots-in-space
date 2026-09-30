@@ -20,7 +20,8 @@ const pragyan: VehicleBuild = {
     "No radioisotope heaters and no night-survival design: ISRO said a wake-up would be a bonus. The model predicts why it didn't.",
     "Guessed: battery capacity, avionics grade (automotive-class), insulation, power split.",
   ],
-  mechanics: { kind: "rover", model: "pragyan", speedMs: 0.01, dutyCycle: 0.1 },
+  // ~100 m driven in its ~10-day mission.
+  mechanics: { kind: "rover", model: "pragyan", speedMs: 0.01, dutyCycle: 0.012 },
   massKg: 26,
   exteriorAreaM2: 2.2,
   charLengthM: 0.6,
@@ -50,7 +51,8 @@ const yutu2: VehicleBuild = {
     "Night survival: it powers down completely for each 14-day night and wakes when light hits the array. Radioisotope heat (Pu-238) is carried into the body by a two-phase fluid loop, and one wing folds over the body as a lid.",
     "The heat-unit wattage and insulation are not published: tuned so the electronics stay above their -55 °C survival rating through a -190 °C night. Calibration, not prediction.",
   ],
-  mechanics: { kind: "rover", model: "yutu", speedMs: 0.055, dutyCycle: 0.05 },
+  // ~1.6 km in five years: a few tens of metres per lunar day.
+  mechanics: { kind: "rover", model: "yutu", speedMs: 0.055, dutyCycle: 0.0004 },
   massKg: 135,
   exteriorAreaM2: 4.5,
   charLengthM: 1.2,
@@ -82,7 +84,8 @@ const curiosity: VehicleBuild = {
     "Actuators use Braycote 601EF grease (rated -80 °C) and are still warmed on cold mornings before driving.",
     "Guessed: share of RTG heat piped inside, insulation thickness, average avionics draw.",
   ],
-  mechanics: { kind: "rover", model: "msl", speedMs: 0.04, dutyCycle: 0.05 },
+  // ~35 km in 12 years, ~8 m per sol on average.
+  mechanics: { kind: "rover", model: "msl", speedMs: 0.04, dutyCycle: 0.002 },
   massKg: 899,
   exteriorAreaM2: 14,
   charLengthM: 2,
@@ -116,7 +119,8 @@ const opportunity: VehicleBuild = {
     "The 2007 storm (opacity ~5) it survived only because the team switched off heaters and ran on ~130 Wh/sol; this preset keeps its heaters on, so it doesn't.",
     "Guessed: heater setpoint and wattage, average avionics draw.",
   ],
-  mechanics: { kind: "rover", model: "mer", speedMs: 0.05, dutyCycle: 0.04 },
+  // 45 km in 5,111 sols, ~9 m per sol on average.
+  mechanics: { kind: "rover", model: "mer", speedMs: 0.05, dutyCycle: 0.002 },
   massKg: 185,
   exteriorAreaM2: 5,
   charLengthM: 1.2,

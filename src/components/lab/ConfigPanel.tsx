@@ -5,7 +5,7 @@
  * reruns the experiment immediately.
  */
 import { RotateCcw } from "lucide-react";
-import { useLab } from "@/lib/lab-store";
+import { bodyOf, useLab } from "@/lib/lab-store";
 import { cn } from "@/lib/utils";
 import { SITES } from "@/sim/env/atmosphere";
 import {
@@ -24,6 +24,7 @@ import { TERRAINS, type TerrainId } from "@/sim/terrain/terrain";
 import { VEHICLES } from "@/sim/vehicles/library";
 import type { VehicleBuild } from "@/sim/vehicles/types";
 import { FidelityBadge, Section, Segmented, SelectField, SliderField } from "./controls";
+import { HomeTag, PlanetSiteSection, SurvivalKitSection, WorldPicker, vehiclesFor } from "./PlanetControls";
 
 const opts = <T extends Record<string, { id: string; name: string }>>(db: T) =>
   Object.values(db).map((p) => ({ value: p.id as keyof T & string, label: p.name }));
@@ -50,9 +51,10 @@ export function ConfigPanel() {
 
   return (
     <div className="text-sm">
+      <WorldPicker />
       <Section title="Vehicle">
         <div className="grid gap-2">
-          {VEHICLES.map((v) => (
+          {vehiclesFor(VEHICLES, bodyOf(sc)).map((v) => (
             <button
               key={v.id}
               type="button"
@@ -66,6 +68,7 @@ export function ConfigPanel() {
             >
               <div className="flex items-center justify-between gap-2">
                 <span className="text-[13px] font-medium text-stone-100">{v.name}</span>
+                <HomeTag v={v} />
                 <FidelityBadge fidelity={v.fidelity} />
               </div>
               <p className="mt-0.5 text-[11px] leading-snug text-stone-400">{v.tagline}</p>
@@ -74,64 +77,68 @@ export function ConfigPanel() {
         </div>
       </Section>
 
-      <Section title="Site & scenario">
-        <SelectField
-          label="Landing site"
-          value={site}
-          options={[...SITES.map((s) => ({ value: s.id as string, label: s.name })), { value: "custom", label: "Custom elevation" }]}
-          onChange={(id) => {
-            const s = SITES.find((x) => x.id === id);
-            if (s) updateScenario({ elevationM: s.elevationM, ground: s.ground });
-          }}
-          hint={SITES.find((s) => s.id === site)?.note}
-        />
-        <SelectField
-          label="Ground"
-          value={sc.ground}
-          options={Object.values(TERRAINS).map((t) => ({ value: t.id as TerrainId, label: t.name }))}
-          hint={TERRAINS[sc.ground].note}
-          onChange={(g) => updateScenario({ ground: g })}
-        />
-        <SliderField
-          label="Elevation"
-          value={sc.elevationM / 1000}
-          min={-2}
-          max={11}
-          step={0.1}
-          format={(v) => `${v.toFixed(1)} km`}
-          onChange={(v) => updateScenario({ elevationM: Math.round(v * 10) * 100 })}
-        />
-        <SliderField
-          label="Surface wind"
-          value={sc.windMs}
-          min={0}
-          max={3}
-          step={0.1}
-          format={(v) => `${v.toFixed(1)} m/s`}
-          hint="Venera measured 0.3-1 m/s"
-          onChange={(v) => updateScenario({ windMs: v })}
-        />
-        {b.descent && (
-          <Segmented
-            value={sc.start.kind}
-            options={[
-              { value: "descent", label: "Descend from 62 km" },
-              { value: "surface", label: "Start on surface" },
-            ]}
-            onChange={(k) => updateScenario({ start: k === "descent" ? { kind: "descent", fromKm: 62 } : { kind: "surface" } })}
+      {sc.planet ? (
+        <PlanetSiteSection />
+      ) : (
+        <Section title="Site & scenario">
+          <SelectField
+            label="Landing site"
+            value={site}
+            options={[...SITES.map((s) => ({ value: s.id as string, label: s.name })), { value: "custom", label: "Custom elevation" }]}
+            onChange={(id) => {
+              const s = SITES.find((x) => x.id === id);
+              if (s) updateScenario({ elevationM: s.elevationM, ground: s.ground });
+            }}
+            hint={SITES.find((s) => s.id === site)?.note}
           />
-        )}
-        {(humanoid || wheeled) && (
-          <Segmented
-            value={sc.activity}
-            options={[
-              { value: "walking", label: humanoid ? "Walking" : "Driving" },
-              { value: "idle", label: humanoid ? "Standing" : "Parked" },
-            ]}
-            onChange={(a) => updateScenario({ activity: a })}
+          <SelectField
+            label="Ground"
+            value={sc.ground}
+            options={Object.values(TERRAINS).map((t) => ({ value: t.id as TerrainId, label: t.name }))}
+            hint={TERRAINS[sc.ground].note}
+            onChange={(g) => updateScenario({ ground: g })}
           />
-        )}
-      </Section>
+          <SliderField
+            label="Elevation"
+            value={sc.elevationM / 1000}
+            min={-2}
+            max={11}
+            step={0.1}
+            format={(v) => `${v.toFixed(1)} km`}
+            onChange={(v) => updateScenario({ elevationM: Math.round(v * 10) * 100 })}
+          />
+          <SliderField
+            label="Surface wind"
+            value={sc.windMs}
+            min={0}
+            max={3}
+            step={0.1}
+            format={(v) => `${v.toFixed(1)} m/s`}
+            hint="Venera measured 0.3-1 m/s"
+            onChange={(v) => updateScenario({ windMs: v })}
+          />
+          {b.descent && (
+            <Segmented
+              value={sc.start.kind}
+              options={[
+                { value: "descent", label: "Descend from 62 km" },
+                { value: "surface", label: "Start on surface" },
+              ]}
+              onChange={(k) => updateScenario({ start: k === "descent" ? { kind: "descent", fromKm: 62 } : { kind: "surface" } })}
+            />
+          )}
+          {(humanoid || wheeled) && (
+            <Segmented
+              value={sc.activity}
+              options={[
+                { value: "walking", label: humanoid ? "Walking" : "Driving" },
+                { value: "idle", label: humanoid ? "Standing" : "Parked" },
+              ]}
+              onChange={(a) => updateScenario({ activity: a })}
+            />
+          )}
+        </Section>
+      )}
 
       <Section
         title="Thermal protection"
@@ -142,7 +149,7 @@ export function ConfigPanel() {
         }
       >
         <SelectField
-          label={b.enclosure.kind === "sealed" ? "Insulation around hull" : "Insulation jackets (e-bay, battery)"}
+          label={b.enclosure.kind === "sealed" ? "Insulation around hull" : b.enclosure.kind === "box" ? "Insulation around warm box" : "Insulation jackets (e-bay, battery)"}
           value={b.insulation.material}
           options={matOpts(INSULATIONS)}
           hint={MATERIALS[b.insulation.material].k + " W/m·K"}
@@ -194,6 +201,8 @@ export function ConfigPanel() {
           onChange={(v) => update((x) => ({ ...x, initialTempK: v + 273.15 }))}
         />
       </Section>
+
+      {sc.planet && <SurvivalKitSection />}
 
       {b.enclosure.kind === "sealed" && (
         <Section title="Pressure hull">

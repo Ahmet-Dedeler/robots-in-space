@@ -1,15 +1,21 @@
 /**
- * Can each humanoid walk on each Venus terrain, and how much motor torque
- * does it need? Runs the exact app physics (MuJoCo WASM + TS controller +
- * Venera terrain heightfield + buoyancy + real mass) headless and writes
+ * Can each humanoid walk on each terrain, and how much motor torque does it
+ * need? Runs the exact app physics (MuJoCo WASM + TS controller + terrain
+ * heightfield + buoyancy + real mass) headless and writes
  * src/sim/data/walking.json, which the thermal model uses to decide when a
- * weakening robot falls.
+ * weakening robot falls. Each terrain runs under its own world's gravity
+ * and gas: Venus CO2, thin Mars air, or vacuum on the Moon and Mercury.
  *
- * Usage: npx tsx scripts/calibrate-walking.ts
+ * Usage: npx tsx scripts/calibrate-walking.ts            (all terrains)
+ *        ONLY=lunarMare,marsGale npx tsx scripts/calibrate-walking.ts
+ *        (only those; other results are kept from the existing file)
  */
 import { readFile, writeFile } from "node:fs/promises";
 import loadMujoco from "@mujoco/mujoco";
 import { atmosphere } from "../src/sim/env/atmosphere";
+import walkingJson from "../src/sim/data/walking.json";
+import { BODIES, sitesFor } from "../src/sim/planets/bodies";
+import { surfaceMedium } from "../src/sim/planets/world";
 import { RobotWorld, type FileProvider } from "../src/sim/robots/robot-world";
 import { TERRAINS, terrain, type TerrainId } from "../src/sim/terrain/terrain";
 import { VEHICLES } from "../src/sim/vehicles/library";
@@ -26,19 +32,31 @@ const COMMAND: [number, number, number] = [0.5, 0, 0.1]; // walks a ~5 m circle
 async function main() {
   const mj = await loadMujoco();
   const atm = atmosphere(0);
-  const out: Record<string, Record<string, { walksAtFull: boolean; minTorque: number | null; meanTripS: number | null; metersPerS: number }>> = {};
+  const venus = { gravity: atm.gravity, densityKgM3: atm.densityKgM3, viscosity: atm.gas.mu, windMs: 0.5 };
+  const only = process.env.ONLY?.split(",");
+  type Gait = { walksAtFull: boolean; minTorque: number | null; meanTripS: number | null; metersPerS: number };
+  const out: Record<string, Record<string, Gait>> = only ? structuredClone(walkingJson.results as Record<string, Record<string, Gait>>) : {};
+  /** Gravity and gas for a terrain: its world's, at that world's first listed site. */
+  const mediumFor = (tid: TerrainId) => {
+    const body = (TERRAINS[tid] as { body?: keyof typeof BODIES }).body;
+    if (!body || body === "venus") return venus;
+    const site = sitesFor(body)[0];
+    return surfaceMedium({ elevationM: site.elevationM, windMs: body === "mars" ? 5 : 0, planet: { body, siteId: site.id, localHour: 12, lsDeg: 150, dustTau: 0.5, chaseSun: false } });
+  };
   for (const v of VEHICLES) {
     if (v.mechanics.kind !== "humanoid") continue;
-    out[v.id] = {};
+    out[v.id] ??= {};
     for (const tid of Object.keys(TERRAINS) as TerrainId[]) {
+      if (only && !only.includes(tid)) continue;
+      const medium = mediumFor(tid);
       const worlds = await Promise.all(
         SEEDS.map((seed) =>
           RobotWorld.create(mj, files, {
             robot: (v.mechanics as { robot: "g1" | "h1" }).robot,
-            gravity: atm.gravity,
-            gasDensity: atm.densityKgM3,
-            gasViscosity: atm.gas.mu,
-            windMs: 0.5,
+            gravity: medium.gravity,
+            gasDensity: medium.densityKgM3,
+            gasViscosity: medium.viscosity,
+            windMs: medium.windMs,
             massKg: v.massKg,
             displacedVolumeM3: displacedVolumeM3(v),
             terrain: terrain(tid, seed),
@@ -97,7 +115,7 @@ async function main() {
       };
       console.log(
         v.id.padEnd(12),
-        tid.padEnd(9),
+        tid.padEnd(15),
         full.ok
           ? `walks ${full.metersPerS.toFixed(2)} m/s, falls below ${Math.round(minTorque! * 100)}% torque`
           : `trips after ~${full.meanTripS!.toFixed(1)} s on average (${full.metersPerS.toFixed(2)} m/s while up)`,

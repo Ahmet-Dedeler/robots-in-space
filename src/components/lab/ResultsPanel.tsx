@@ -12,6 +12,8 @@ import { CapabilityChart, TemperatureChart } from "./Charts";
 import { FIDELITY_HINT, FidelityBadge } from "./controls";
 import { SEVERITY_STYLE, fmtClock } from "./format";
 import { Sweep } from "./Sweep";
+import { PlanetModelNotes } from "./PlanetNotes";
+import { WorldChart } from "./WorldChart";
 
 function Metric({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
@@ -122,6 +124,7 @@ function Timeline() {
 
 function Notes() {
   const build = useLab((s) => s.result.build);
+  const planet = useLab((s) => s.result.scenario.planet);
   const materials = [build.frame.material, build.skin.material, build.insulation.material, build.pcm?.material]
     .filter(Boolean)
     .map((id) => MATERIALS[id!])
@@ -153,6 +156,9 @@ function Notes() {
       )}
       <div>
         <h4 className="mb-1 text-[11px] tracking-wide text-stone-500 uppercase">How this is computed</h4>
+        {planet ? (
+          <PlanetModelNotes />
+        ) : (
         <ul className="list-disc space-y-1 pl-4 text-stone-400">
           <li>Atmosphere: VIRA reference profiles (Seiff et al. 1985); real-gas CO₂ properties from CoolProp (supercritical near the surface).</li>
           <li>Heat: a lumped thermal network (skin, frame, hull, electronics, battery, motors, heat sink) with natural + forced convection correlations and radiation. Correlations are good to about ±20%.</li>
@@ -163,6 +169,7 @@ function Notes() {
           <li>Optics: spectral Rayleigh extinction of CO₂ at the local density, cloud-deck Mie extinction, diffuse-only light (no direct sunbeam reaches the surface).</li>
           <li>Descent: quasi-steady terminal velocity through the VIRA density profile.</li>
         </ul>
+        )}
       </div>
     </div>
   );
@@ -185,6 +192,12 @@ export function ResultsPanel() {
           <Timeline />
         </TabsContent>
         <TabsContent value="charts" className="space-y-4 p-4">
+          {result.scenario.planet && (
+            <div>
+              <h4 className="mb-2 text-[11px] tracking-wide text-stone-500 uppercase">Day, night &amp; power</h4>
+              <WorldChart result={result} />
+            </div>
+          )}
           <div>
             <h4 className="mb-2 text-[11px] tracking-wide text-stone-500 uppercase">Part temperatures</h4>
             <TemperatureChart result={result} />

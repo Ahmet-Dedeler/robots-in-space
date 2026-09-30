@@ -10,7 +10,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Venus Lab
 
-Browser sandbox for physics experiments on Venus: drop a robot, lander or custom build onto the surface (or descend from 62 km) and see what fails and when. Not a textbook: every screen is an experiment with a verdict.
+Browser sandbox for physics experiments on Venus: drop a robot, lander or custom build onto the surface (or descend from 62 km) and see what fails and when. Not a textbook: every screen is an experiment with a verdict. The Moon, Mars and Mercury run through the same loop (see `docs/planets.md`).
 
 ## Layout
 
@@ -20,6 +20,7 @@ Browser sandbox for physics experiments on Venus: drop a robot, lander or custom
   - `thermal/`: lumped thermal network solver (implicit, enthalpy-based PCM)
   - `vehicles/`: `VehicleBuild` presets and the build → thermal network generator
   - `mission/run.ts`: runs an experiment and returns the series, events and verdict
+  - `planets/`: Moon, Mars, Mercury. `world.ts` is the environment the mission loop talks to (Venus is a pass-through to VIRA); `regolith.ts` ground temperatures, `solar.ts` the Sun, `mars.ts` Mars air/dust, `cold.ts` cold limits
   - `robots/policy.ts`: Unitree walking policy (LSTM + MLP) ported to TS
   - `robots/robot-world.ts`, `robots/skidsteer-world.ts`: MuJoCo worlds (terrain heightfield, buoyancy, spec mass, plastic hinges), shared by the browser and Node tests
   - `terrain/terrain.ts`: the Venera-derived ground. It is one function used for both collision and rendering, so never render terrain from anything else
@@ -32,6 +33,8 @@ Browser sandbox for physics experiments on Venus: drop a robot, lander or custom
 
 - Every number in `sim/` needs a source or an explicit "guess"/"calibrated" note next to it. Keep the fidelity labels (validated / calibrated / approximation / hypothetical) honest.
 - Don't break the validation tests (`pnpm test`): Venera 13 descent (~1 h, ~7.5 m/s) and surface survival (127 min ±25%), plus TS policy parity with PyTorch. If a model change moves Venera, recalibrate and say so in the vehicle notes.
+- Same for the other worlds (`sim/planets/planets.test.ts`): Diviner lunar temperatures, Mercury hot/warm longitudes, Pragyan dies in its first night, Yutu-2 wakes up, Curiosity survives the 2018 storm, Opportunity doesn't.
+- Keep Venus bit-identical when touching `planets/`: the `World` for Venus must not change any Venus number.
 - Mutable engine objects (MuJoCo model/data, three.js objects touched per frame) live in refs, not React state or memo. The React Compiler lint rules enforce this.
 - Colors for chart series are fixed per part role (`ROLE_COLOR`). Never cycle them.
 - Running logs and findings go in `docs/`, not here.

@@ -113,6 +113,26 @@ export interface World {
   summary(): string;
 }
 
+/** Gravity and gas the mechanics (MuJoCo) should use at the start of a scenario. */
+export function surfaceMedium(sc: { elevationM: number; windMs: number; planet?: PlanetScenario }): {
+  gravity: number;
+  densityKgM3: number;
+  viscosity: number;
+  windMs: number;
+} {
+  if (!sc.planet) {
+    const a = atmosphere(sc.elevationM);
+    return { gravity: a.gravity, densityKgM3: a.densityKgM3, viscosity: a.gas.mu, windMs: sc.windMs };
+  }
+  const body = BODIES[sc.planet.body];
+  const gravity = gravityAt(body, sc.elevationM);
+  if (body.atmosphere !== "mars") return { gravity, densityKgM3: 0, viscosity: 0, windMs: 0 };
+  // Mars: ideal gas at a typical ~210 K near-surface temperature (dynamic pressure is all that matters here).
+  const p = marsPressure(sc.elevationM, sc.planet.lsDeg);
+  const gas = co2Props(210, p);
+  return { gravity, densityKgM3: gas.rho, viscosity: gas.mu, windMs: sc.windMs };
+}
+
 export function createWorld(build: VehicleBuild, elevationM: number, planet: PlanetScenario | undefined): World {
   return planet ? new PlanetWorld(build, elevationM, planet) : new VenusWorld();
 }
@@ -335,13 +355,17 @@ class PlanetWorld implements World {
       Q[R.skin] -= w;
       for (const i of inside) Q[i] += w / inside.length;
     }
-    // Switchable radiator: opens above its setpoint (2 K band), radiating to the sky with emissivity 0.85.
+    // Switchable radiator: an upward-facing panel of optical solar reflectors
+    // (emissivity 0.8, solar absorptivity 0.1; Gilmore 2002) that opens above its
+    // setpoint (2 K band). It sees ~90% sky and ~10% ground, and absorbs a little sunlight.
     if (b.radiator && inside.length) {
       const warm = Math.max(...inside.map((i) => T[i]));
       const open = Math.min(1, Math.max(0, (warm - b.radiator.openAboveK) / 2));
       if (open > 0) {
-        const env = this.sample();
-        for (const i of inside) Q[i] -= (open * 0.85 * SIGMA * b.radiator.areaM2 * (T[i] ** 4 - env.radiantK ** 4)) / inside.length;
+        const skyIr = this.body.atmosphere === "mars" ? marsSkyIr(this.planet.dustTau) : 0;
+        const sink = 0.9 * skyIr + 0.1 * SIGMA * this.groundK() ** 4;
+        const { global } = this.light();
+        for (const i of inside) Q[i] -= (open * b.radiator.areaM2 * (0.8 * (SIGMA * T[i] ** 4 - sink) - 0.1 * global)) / inside.length;
       }
     }
     // Thermostatic survival heaters (with 3 K hysteresis) need battery power.
@@ -449,7 +473,14 @@ class PlanetWorld implements World {
     if (this.planet.chaseSun && groundSpeedMs > 0) {
       const V = terminatorSpeed(this.clock);
       rate = Math.max(0, 1 - groundSpeedMs / V);
-      if (rate > 0 && !this.chaseWarned) {
+      if (rate === 0 && !this.chaseWarned) {
+        this.chaseWarned = true;
+        emit(
+          "info",
+          "Keeping pace with the Sun",
+          `Driving west at ${groundSpeedMs.toFixed(2)} m/s against a day-night line moving at ${V.toFixed(2)} m/s: local time stays at ${fmtHour(this.sun().localHour)} for as long as it keeps driving.`,
+        );
+      } else if (rate > 0 && !this.chaseWarned) {
         this.chaseWarned = true;
         emit(
           "info",
@@ -465,12 +496,14 @@ class PlanetWorld implements World {
     // Day/night bookkeeping and hibernation.
     const sun = this.sun();
     const dark = sun.mu <= 0 || sun.fluxNormal === 0;
+    // Short Martian sols: narrate the first two, then just count (the timeline would be all sunsets).
+    const narrate = this.body.id !== "mars" || this.nightsSurvived < 2;
     if (this.wasDark && !dark) {
       if (alive) {
         this.nightsSurvived++;
-        emit("info", "Sunrise", `Night ${this.nightsSurvived} survived.`);
+        if (narrate) emit("info", "Sunrise", `Night ${this.nightsSurvived} survived.${this.body.id === "mars" && this.nightsSurvived === 2 ? " (Further sols not listed.)" : ""}`);
       }
-    } else if (!this.wasDark && dark) {
+    } else if (!this.wasDark && dark && narrate) {
       emit("info", "Sunset", `Local night begins: ${this.nightLength()}.`);
     }
     this.wasDark = dark;
@@ -484,10 +517,10 @@ class PlanetWorld implements World {
       const bright = hasArray ? s > need : !dark;
       if (!this.sleeping && tooDim && alive) {
         this.sleeping = true;
-        emit("info", "Going to sleep", hasArray ? "Array output too low to run: everything off except heaters and a receiver." : "Night: everything off except heaters and a receiver, recharging the battery.", "electronics");
+        if (narrate) emit("info", "Going to sleep", hasArray ? "Array output too low to run: everything off except heaters and a receiver." : "Night: everything off except heaters and a receiver, recharging the battery.", "electronics");
       } else if (this.sleeping && bright) {
         this.sleeping = false;
-        if (alive) emit("info", "Woke up", "Enough sunlight on the array to run again.", "electronics");
+        if (alive && narrate) emit("info", "Woke up", hasArray ? "Enough sunlight on the array to run again." : "Morning: back to work.", "electronics");
       }
     }
   }
@@ -508,7 +541,7 @@ class PlanetWorld implements World {
     if (this.nightsSurvived > 0) parts.push(`Survived ${this.nightsSurvived} ${night}${this.nightsSurvived > 1 ? "s" : ""}.`);
     if (this.planet.chaseSun && this.distanceM > 1000)
       parts.push(`Chased the Sun ${(this.distanceM / 1000).toFixed(0)} km, holding local time at ${fmtHour(this.sun().localHour)}.`);
-    else if (this.distanceM > 100) parts.push(`Drove ${this.distanceM >= 1000 ? `${(this.distanceM / 1000).toFixed(1)} km` : `${this.distanceM.toFixed(0)} m`}.`);
+    else if (this.distanceM > 100) parts.push(`${this.build.mechanics.kind === "humanoid" ? "Walked" : "Drove"} ${this.distanceM >= 1000 ? `${(this.distanceM / 1000).toFixed(1)} km` : `${this.distanceM.toFixed(0)} m`}.`);
     return parts.length ? " " + parts.join(" ") : "";
   }
 }

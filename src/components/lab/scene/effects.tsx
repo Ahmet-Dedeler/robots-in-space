@@ -14,6 +14,8 @@
 import { useFrame } from "@react-three/fiber";
 import { forwardRef, useImperativeHandle, useLayoutEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
+import { useLab } from "@/lib/lab-store";
+import { surfaceMedium } from "@/sim/planets/world";
 
 let seed = 12345;
 const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
@@ -84,11 +86,13 @@ export const MeltDrips = forwardRef<DripsHandle, { groundAt: GroundAt }>(functio
     const d = drops.current;
     const p = pools.current;
     if (!d || !p) return;
+    const medium = surfaceMedium(useLab.getState().config.scenario);
     let n = 0;
     for (let i = 0; i < MAX_DRIPS; i++) {
       if (!s.live[i]) continue;
       // Viscous melt stretches before letting go, then falls through dense CO2 (low terminal speed).
-      s.vel[i] = Math.min(s.vel[i] + 8.87 * dt, 1.6);
+      // In vacuum or thin Mars air nothing slows it down.
+      s.vel[i] = Math.min(s.vel[i] + medium.gravity * dt, medium.densityKgM3 > 10 ? 1.6 : 20);
       s.pos[i].y -= s.vel[i] * dt;
       const ground = groundAt(s.pos[i].x, s.pos[i].z);
       if (s.pos[i].y <= ground + 0.003) {

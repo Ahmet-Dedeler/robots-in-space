@@ -10,6 +10,7 @@
 import { create } from "zustand";
 import { runExperiment, type RunResult, type Scenario } from "@/sim/mission/run";
 import { SITES } from "@/sim/env/atmosphere";
+import { BODIES, siteById, sitesFor, type BodyId } from "@/sim/planets/bodies";
 import { VEHICLES, vehicleById } from "@/sim/vehicles/library";
 import type { VehicleBuild } from "@/sim/vehicles/types";
 
@@ -35,6 +36,8 @@ interface LabState {
   pinned: RunResult | null;
   playback: Playback;
   setVehicle: (id: string) => void;
+  /** Move the current vehicle to another world (resets the scenario to that world's default site). */
+  setWorld: (body: BodyId) => void;
   updateBuild: (patch: (b: VehicleBuild) => VehicleBuild) => void;
   updateScenario: (patch: Partial<Scenario>) => void;
   resetBuild: () => void;
@@ -50,7 +53,30 @@ interface LabState {
 
 export const clone = <T,>(x: T): T => structuredClone(x);
 
-export function defaultScenario(build: VehicleBuild): Scenario {
+/** The world a scenario is on. */
+export const bodyOf = (s: Scenario): BodyId => s.planet?.body ?? "venus";
+
+export function defaultScenario(build: VehicleBuild, body: BodyId = build.home?.body ?? "venus"): Scenario {
+  const mobile = build.mechanics.kind !== "static";
+  if (body !== "venus") {
+    const home = build.home?.body === body ? build.home : undefined;
+    const site = (home && siteById(home.siteId)) || sitesFor(body)[0];
+    return {
+      elevationM: site.elevationM,
+      ground: site.ground,
+      windMs: body === "mars" ? 5 : 0,
+      start: { kind: "surface" },
+      activity: mobile ? "walking" : "idle",
+      planet: {
+        body,
+        siteId: site.id,
+        localHour: home?.localHour ?? 8,
+        lsDeg: home?.lsDeg ?? 150,
+        dustTau: home?.dustTau ?? (body === "mars" ? 0.5 : 0),
+        chaseSun: home?.chaseSun ?? false,
+      },
+    };
+  }
   const lander = build.mechanics.kind === "static" && build.descent;
   const elevationM = build.homeElevationM ?? 0;
   return {
@@ -68,6 +94,9 @@ export function defaultScenario(build: VehicleBuild): Scenario {
  * so the walking looks right.
  */
 export function autoWarp(r: RunResult): number {
+  // Off Venus the story is day and night: one local day per ~24 s, so sunsets don't strobe.
+  // (Humanoids keep the Venus rule so the walking stays watchable.)
+  if (r.scenario.planet && r.build.mechanics.kind !== "humanoid") return Math.round(BODIES[r.scenario.planet.body].solarDayS / 24);
   const end = r.verdict.deathS ?? r.durationS;
   const target = r.build.mechanics.kind === "humanoid" ? 40 : 30;
   return Math.max(1, Math.round(end / target));
@@ -96,7 +125,13 @@ export const useLab = create<LabState>((set, get) => {
       const base = vehicleById(id);
       if (!base) return;
       const build = clone(base);
-      rerun({ baseId: id, build, scenario: defaultScenario(build) });
+      // Stay on the world you're looking at: drop a Venus robot on the Moon, or a Moon rover on Mars.
+      rerun({ baseId: id, build, scenario: defaultScenario(build, bodyOf(get().config.scenario)) });
+      get().restart();
+    },
+    setWorld(body) {
+      const c = get().config;
+      rerun({ ...c, scenario: defaultScenario(c.build, body) });
       get().restart();
     },
     updateBuild(patch) {

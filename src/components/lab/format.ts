@@ -2,7 +2,8 @@ import type { Severity } from "@/sim/mission/run";
 import type { Role } from "@/sim/vehicles/thermal-model";
 
 export const fmtC = (k: number) => `${(k - 273.15).toFixed(0)} °C`;
-export const fmtBar = (pa: number) => (pa >= 1e5 ? `${(pa / 1e5).toFixed(pa > 1e6 ? 0 : 1)} bar` : `${(pa / 100).toFixed(0)} hPa`);
+export const fmtBar = (pa: number) =>
+  pa < 1 ? "vacuum" : pa >= 1e5 ? `${(pa / 1e5).toFixed(pa > 1e6 ? 0 : 1)} bar` : `${(pa / 100).toFixed(pa < 1000 ? 1 : 0)} hPa`;
 
 /** T+ clock: 0:45, 12:03, 1:02:33, 2d 03:14. */
 export function fmtClock(s: number): string {

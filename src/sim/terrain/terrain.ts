@@ -36,7 +36,7 @@
  * h(x, y) is a pure deterministic function in metres (x east, y north, z up),
  * shared by the MuJoCo collision heightfield and the rendered ground.
  */
-import type { BodyId } from "../planets/bodies";
+import { BODIES, type BodyId } from "../planets/bodies";
 
 export interface TerrainStyle {
   id: string;
@@ -359,7 +359,10 @@ export class Terrain {
     const local = this.slope * 40 * Math.tanh(x / 40);
     const small = 0.04 * (fbm(x / 3, y / 3, this.seed + 5, 3) - 0.5);
     const swell = 6 * (fbm(x / 400, y / 400, this.seed + 41, 4) - 0.5) * smoothstep(30, 300, r);
-    return local + small + swell;
+    // Small worlds curve away fast: from 1.7 m up, the lunar horizon is only ~2.4 km off
+    // (sqrt(2 R h)). Negligible under the robot (<0.1 mm over the physics patch).
+    const curve = this.style.body ? (r * r) / (2 * BODIES[this.style.body].radiusM) : 0;
+    return local + small + swell - curve;
   }
 
   sample(x: number, y: number): TerrainSample {

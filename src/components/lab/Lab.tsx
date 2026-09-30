@@ -2,7 +2,8 @@
 
 import dynamic from "next/dynamic";
 import { useEffect } from "react";
-import { decodeConfig, useLab } from "@/lib/lab-store";
+import { bodyOf, decodeConfig, useLab } from "@/lib/lab-store";
+import { BODIES } from "@/sim/planets/bodies";
 import { ConfigPanel } from "./ConfigPanel";
 import { ResultsPanel } from "./ResultsPanel";
 import { TimeBar } from "./TimeBar";
@@ -13,6 +14,7 @@ const Viewport = dynamic(() => import("./Viewport"), {
 
 export function Lab() {
   const loadConfig = useLab((s) => s.loadConfig);
+  const world = BODIES[useLab((s) => bodyOf(s.config.scenario))];
 
   // Restore a shared experiment from ?x=...
   useEffect(() => {
@@ -26,9 +28,9 @@ export function Lab() {
       <header className="flex h-11 shrink-0 items-center justify-between border-b border-white/5 px-4">
         <div className="flex items-baseline gap-3">
           <span className="text-sm font-semibold tracking-tight text-amber-100">Venus Lab</span>
-          <span className="hidden text-xs text-stone-500 sm:inline">What survives on Venus, and for how long. Real data, real physics, in your browser.</span>
+          <span className="hidden text-xs text-stone-500 sm:inline">What survives on {world.name === "Moon" ? "the Moon" : world.name}, and for how long. Real data, real physics, in your browser.</span>
         </div>
-        <span className="font-mono text-[10px] text-stone-600">737 K · 92 bar · CO₂</span>
+        <span className="font-mono text-[10px] text-stone-600">{world.blurb}</span>
       </header>
       <main className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[300px_minmax(0,1fr)_400px]">
         <aside className="order-2 min-h-0 overflow-y-auto border-white/5 lg:order-1 lg:border-r">

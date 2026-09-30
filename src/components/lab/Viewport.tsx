@@ -13,7 +13,9 @@ import { HumanoidView } from "./scene/HumanoidView";
 import { LanderView } from "./scene/LanderView";
 import { TerrainView } from "./scene/TerrainView";
 import { useTerrain } from "./scene/useScene";
-import { VenusEnvironment } from "./scene/VenusEnvironment";
+import { RoverView } from "./scene/RoverView";
+import { WorldEnvironment } from "./scene/WorldEnvironment";
+import { fmtHour } from "@/sim/planets/world";
 import { WheeledView } from "./scene/WheeledView";
 
 /** Advances the experiment clock every rendered frame. */
@@ -49,6 +51,7 @@ function Hud() {
   const elevationM = useLab((s) => s.config.scenario.elevationM);
   const st = stateAt(result, t);
   const above = st.altitudeM - elevationM;
+  const planet = result.scenario.planet;
   const humanoid = result.build.mechanics.kind === "humanoid";
   const walkMin = walkingFor(result.build, result.scenario.ground)?.minTorque ?? 0.7;
   const w = warp ?? autoWarp(result);
@@ -59,10 +62,14 @@ function Hud() {
     <>
       <div className="pointer-events-none absolute top-3 left-3 space-y-1 rounded-lg border border-white/10 bg-black/35 px-3 py-2 backdrop-blur-md">
         <div className="text-[10px] tracking-[0.16em] text-amber-200/80 uppercase">
-          {above > 1 ? `Descending · ${(st.altitudeM / 1000).toFixed(1)} km · ${st.speedMs.toFixed(1)} m/s` : "On the surface"}
+          {above > 1
+            ? `Descending · ${(st.altitudeM / 1000).toFixed(1)} km · ${st.speedMs.toFixed(1)} m/s`
+            : planet
+              ? `${fmtHour(st.world.localHour)} local · Sun ${st.world.sunElevDeg >= 0 ? `${st.world.sunElevDeg.toFixed(0)}° up` : "down"}${st.world.awake < 0.5 && st.controller ? " · asleep" : ""}`
+              : "On the surface"}
         </div>
         <div className="flex gap-4 font-mono text-xs text-stone-100 tabular-nums">
-          <span>{fmtC(st.ambientK)}</span>
+          <span>{planet && st.pressurePa < 1 ? `ground ${fmtC(st.ambientK)}` : fmtC(st.ambientK)}</span>
           <span>{fmtBar(st.pressurePa)}</span>
           {iE >= 0 && <span className="text-stone-300">e-bay {fmtC(st.nodeK[iE])}</span>}
         </div>
@@ -74,6 +81,7 @@ function Hud() {
       <div className="pointer-events-none absolute top-3 right-3 flex flex-col items-end gap-1.5">
         <Chip label="Controller" value={st.controller ? "alive" : "dead"} tone={st.controller ? "ok" : "bad"} />
         <Chip label="Power" value={st.power ? `${Math.round(st.batteryWh)} Wh` : "none"} tone={st.power ? "ok" : "bad"} />
+        {result.build.solar && <Chip label="Solar" value={`${Math.round(st.world.solarW)} W`} tone={st.world.solarW > result.build.electronics.powerW ? "ok" : st.world.solarW > 0 ? "warn" : "bad"} />}
         {result.build.motors && (
           <Chip
             label={result.build.mechanics.kind === "wheeled" ? "Drive" : "Torque"}
@@ -92,23 +100,26 @@ export default function Viewport() {
   const [status, setStatus] = useState<{ ok: boolean; err?: string } | null>(null);
   const onReady = useCallback((ok: boolean, err?: string) => setStatus({ ok, err }), []);
   const humanoid = mech.kind === "humanoid";
-  const key = mech.kind === "humanoid" ? `${mech.robot}-${mech.finish ?? "stock"}` : mech.kind === "wheeled" ? mech.model : mech.shape;
+  const key = mech.kind === "humanoid" ? `${mech.robot}-${mech.finish ?? "stock"}` : mech.kind === "wheeled" || mech.kind === "rover" ? mech.model : mech.shape;
 
   return (
     <div className="relative h-full w-full overflow-hidden bg-[#b8743a]">
       <Canvas
         key={key}
+        shadows="percentage"
         dpr={[1, 2]}
         camera={{ position: humanoid ? [2.6, 1.6, 3.2] : mech.kind === "wheeled" ? [6, 3.5, 7.5] : [5, 3.2, 6.5], fov: 45, near: 0.03, far: 12000 }}
         gl={{ antialias: true, logarithmicDepthBuffer: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.0 }}
       >
         <PlaybackDriver />
-        <VenusEnvironment />
+        <WorldEnvironment />
         <Ground />
         {mech.kind === "humanoid" ? (
           <HumanoidView robot={mech.robot} finish={mech.finish} onReady={onReady} />
         ) : mech.kind === "wheeled" ? (
           <WheeledView />
+        ) : mech.kind === "rover" ? (
+          <RoverView model={mech.model} />
         ) : (
           <LanderView shape={mech.shape} />
         )}

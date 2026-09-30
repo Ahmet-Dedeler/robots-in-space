@@ -24,6 +24,8 @@ interface SweepParam {
   min: number;
   max: number;
   apply: (b: VehicleBuild, s: Scenario, v: number) => void;
+  /** Only offered on this world ("planet" = Moon, Mars or Mercury). Everywhere when absent. */
+  world?: "venus" | "planet" | "mars";
 }
 
 const PARAMS: SweepParam[] = [
@@ -38,9 +40,28 @@ const PARAMS: SweepParam[] = [
   },
   { id: "cooler", label: "Active cooler power", unit: "W", min: 0, max: 3000, apply: (b, _s, v) => void (b.cooler = makeCooler(b, v)) },
   { id: "initial", label: "Start temperature", unit: "°C", min: -80, max: 40, apply: (b, _s, v) => void (b.initialTempK = v + 273.15) },
-  { id: "elevation", label: "Site elevation", unit: "km", min: -2, max: 11, apply: (_b, s, v) => void (s.elevationM = v * 1000) },
+  { id: "elevation", label: "Site elevation", unit: "km", min: -2, max: 11, world: "venus", apply: (_b, s, v) => void (s.elevationM = v * 1000) },
+  { id: "dust", label: "Dust opacity", unit: "τ", min: 0.3, max: 12, world: "mars", apply: (_b, s, v) => void (s.planet = s.planet && { ...s.planet, dustTau: v }) },
+  { id: "hour", label: "Start local time", unit: "h", min: 0, max: 23, world: "planet", apply: (_b, s, v) => void (s.planet = s.planet && { ...s.planet, localHour: v }) },
+  { id: "rhu", label: "Radioisotope heaters", unit: "W", min: 0, max: 100, world: "planet", apply: (b, _s, v) => void (b.rhuW = v) },
+  {
+    id: "solar",
+    label: "Solar array area",
+    unit: "m²",
+    min: 0,
+    max: 4,
+    world: "planet",
+    apply: (b, _s, v) => void (b.solar = v > 0 ? { areaM2: v, efficiency: b.solar?.efficiency ?? 0.28, mount: b.solar?.mount ?? "tracking" } : undefined),
+  },
   { id: "battery", label: "Battery capacity", unit: "Wh", min: 100, max: 10000, apply: (b, _s, v) => void (b.battery.capacityWh = v) },
 ];
+
+type SweepWorld = "venus" | "planet" | "mars";
+const PARAMS_BY_WORLD: Record<SweepWorld, SweepParam[]> = {
+  venus: PARAMS.filter((p) => !p.world || p.world === "venus"),
+  planet: PARAMS.filter((p) => !p.world || p.world === "planet"),
+  mars: PARAMS.filter((p) => !p.world || p.world === "planet" || p.world === "mars"),
+};
 
 /** Time from reaching the surface to death, or the whole run if it never died. */
 function surfaceLife(r: RunResult): { value: number; censored: boolean } {
@@ -54,7 +75,8 @@ export function Sweep() {
   const [paramId, setParamId] = useState("insulation");
   const [points, setPoints] = useState<{ x: number; life: number; censored: boolean }[]>([]);
   const [running, setRunning] = useState(false);
-  const param = PARAMS.find((p) => p.id === paramId)!;
+  const params = PARAMS_BY_WORLD[config.scenario.planet ? (config.scenario.planet.body === "mars" ? "mars" : "planet") : "venus"];
+  const param = params.find((p) => p.id === paramId) ?? params[0];
 
   const run = async () => {
     setRunning(true);
@@ -65,8 +87,8 @@ export function Sweep() {
       const b = clone(config.build);
       const s = clone(config.scenario);
       param.apply(b, s, x);
-      // Cap long runs: a sweep only needs to know "a lot longer".
-      const r = runExperiment(b, { ...s, maxDurationS: 30 * 86400 });
+      // Cap long runs: a sweep only needs to know "a lot longer". Off Venus, keep the full run so nights count.
+      const r = runExperiment(b, s.planet ? s : { ...s, maxDurationS: 30 * 86400 });
       const l = surfaceLife(r);
       out.push({ x, life: l.value, censored: l.censored });
       setPoints([...out]);
@@ -114,7 +136,7 @@ export function Sweep() {
           <SelectField
             label="Parameter"
             value={paramId}
-            options={PARAMS.map((p) => ({ value: p.id, label: `${p.label} (${p.min}-${p.max} ${p.unit})` }))}
+            options={params.map((p) => ({ value: p.id, label: `${p.label} (${p.min}-${p.max} ${p.unit})` }))}
             onChange={(v) => {
               setParamId(v);
               setPoints([]);

@@ -13,14 +13,14 @@ import type { Role } from "@/sim/vehicles/thermal-model";
 import { AMBIENT_COLOR, ROLE_COLOR, ROLE_SHORT } from "./format";
 import { UPlot } from "./UPlot";
 
-const AXIS = {
+export const AXIS = {
   stroke: "#a39d94",
   grid: { stroke: "rgba(255,255,255,0.06)", width: 1 },
   ticks: { stroke: "rgba(255,255,255,0.1)", width: 1 },
   font: "11px var(--font-geist-mono), ui-monospace, monospace",
 };
 
-function timeUnit(end: number): { div: number; label: string } {
+export function timeUnit(end: number): { div: number; label: string } {
   if (end < 180) return { div: 1, label: "s" };
   if (end < 3 * 3600) return { div: 60, label: "min" };
   if (end < 3 * 86400) return { div: 3600, label: "h" };
@@ -28,7 +28,7 @@ function timeUnit(end: number): { div: number; label: string } {
 }
 
 /** Draws the playhead and lets clicks seek. Returns a uPlot plugin. */
-function usePlayhead(div: number) {
+export function usePlayhead(div: number) {
   const plots = useRef(new Set<uPlot>());
   const tRef = useRef(0);
   useEffect(() => {
@@ -80,7 +80,7 @@ function usePlayhead(div: number) {
   );
 }
 
-function deathMarker(result: RunResult, div: number): uPlot.Plugin {
+export function deathMarker(result: RunResult, div: number): uPlot.Plugin {
   return {
     hooks: {
       draw: [

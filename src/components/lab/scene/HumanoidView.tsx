@@ -17,7 +17,7 @@ import { useFrame, useThree } from "@react-three/fiber";
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { useLab } from "@/lib/lab-store";
-import { atmosphere } from "@/sim/env/atmosphere";
+import { surfaceMedium } from "@/sim/planets/world";
 import { stateAt } from "@/sim/mission/run";
 import type { MjModel } from "@mujoco/mujoco";
 import { RobotWorld, type FileProvider } from "@/sim/robots/robot-world";
@@ -133,8 +133,11 @@ export function HumanoidView({
   finish?: Finish;
   onReady?: (ok: boolean, err?: string) => void;
 }) {
-  const elevationM = useLab((s) => s.config.scenario.elevationM);
-  const windMs = useLab((s) => s.config.scenario.windMs);
+  // Gravity and gas of whichever world we're on (Venus CO2, thin Mars air, or vacuum).
+  const gravity = useLab((s) => surfaceMedium(s.config.scenario).gravity);
+  const gasDensity = useLab((s) => surfaceMedium(s.config.scenario).densityKgM3);
+  const gasViscosity = useLab((s) => surfaceMedium(s.config.scenario).viscosity);
+  const windMs = useLab((s) => surfaceMedium(s.config.scenario).windMs);
   const massKg = useLab((s) => s.config.build.massKg);
   const volume = useLab((s) => displacedVolumeM3(s.config.build));
   const loadFraction = useLab((s) => s.config.build.frame.loadFraction);
@@ -152,14 +155,13 @@ export function HumanoidView({
   // (Re)build the MuJoCo world when the robot, the medium or the ground changes.
   useEffect(() => {
     let cancelled = false;
-    const atm = atmosphere(elevationM);
     loadMujoco()
       .then((mj) =>
         RobotWorld.create(mj, browserFiles, {
           robot,
-          gravity: atm.gravity,
-          gasDensity: atm.densityKgM3,
-          gasViscosity: atm.gas.mu,
+          gravity,
+          gasDensity,
+          gasViscosity,
           windMs,
           massKg,
           displacedVolumeM3: volume,
@@ -192,7 +194,7 @@ export function HumanoidView({
       runtime.current = null;
       setGroup(null);
     };
-  }, [robot, finish, elevationM, windMs, massKg, volume, loadFraction, terrain, onReady, uniforms]);
+  }, [robot, finish, gravity, gasDensity, gasViscosity, windMs, massKg, volume, loadFraction, terrain, onReady, uniforms]);
 
   useFrame((_, delta) => {
     const rt = runtime.current;

@@ -171,7 +171,7 @@ export function runExperiment(build: VehicleBuild, scenario: Scenario): RunResul
       0,
       "fatal",
       "Diesel engine can't run",
-      `No oxygen: Venus air is 96.5% CO2 and 3.5% N2. The ${build.powerplant.powerKw} kW engine can't combust, so the machine can't move; only the starter battery powers the electronics.`,
+      `No oxygen: ${world.body.id === "venus" ? "Venus air is 96.5% CO2 and 3.5% N2" : world.body.id === "mars" ? "Mars air is 95% CO2 at under 1% of Earth's pressure" : "there is no air at all"}. The ${build.powerplant.powerKw} kW engine can't combust, so the machine can't move; only the starter battery powers the electronics.`,
     );
   if (battery.minOperatingK > build.initialTempK)
     emit(0, "info", "Thermal battery activated", "Pyrotechnic heater melts the salt electrolyte so the battery can run.", "battery");
@@ -302,7 +302,8 @@ export function runExperiment(build: VehicleBuild, scenario: Scenario): RunResul
     if (magnet && R.motors !== undefined) magnetPeakK = Math.max(magnetPeakK, net.T[R.motors]);
     const magnetFrac = magnet && R.motors !== undefined ? magnetTorqueFraction(magnet, net.T[R.motors], magnetPeakK) : 1;
     const sizeFrac = build.motors && magnet ? Math.min(1, magnet.relativeTorque * build.motors.sizeFactor) : 1;
-    const torque = build.motors ? (windingOk ? magnetFrac * sizeFrac * lubricantFactor * world.coldTorque(net.T) : 0) * (engineRuns ? 1 : 0) : 0;
+    const coldFrac = world.coldTorque(net.T);
+    const torque = build.motors ? (windingOk ? magnetFrac * sizeFrac * lubricantFactor * coldFrac : 0) * (engineRuns ? 1 : 0) : 0;
     const frameYield = yieldFraction(frameMat, net.T[R.frame!]);
     const walking = mobile && scenario.activity === "walking" && landedS !== null;
     // Blind walking policies trip on rough ground even when healthy (MuJoCo calibration).
@@ -327,7 +328,9 @@ export function runExperiment(build: VehicleBuild, scenario: Scenario): RunResul
       stopAt = Math.min(maxT, t + Math.max(300, 0.25 * t));
     }
     controllerOkPrev = controller;
-    if (mobile && walkStopS === null && !canWalk && landedS !== null && !(controller && world.asleep())) {
+    // Asleep, or joints too cold until the morning warms them: a pause, not the end of driving.
+    const pausedForCold = coldFrac < 1 && controller && frameOk;
+    if (mobile && walkStopS === null && !canWalk && landedS !== null && !(controller && world.asleep()) && !pausedForCold) {
       walkStopS = t;
       if (wheeled) {
         const why = !engineRuns ? "the diesel engine cannot run without oxygen" : !controller ? "controller dead" : !frameOk ? "frame yielded" : `drive torque down to ${(torque * 100).toFixed(0)}%`;
@@ -340,7 +343,9 @@ export function runExperiment(build: VehicleBuild, scenario: Scenario): RunResul
         : !frameOk
           ? "frame yielded"
           : tripped
-            ? `tripped on the ${scenario.ground === "venera9" ? "boulder slope" : "rock plates"} (typical after ~${gait!.meanTripS!.toFixed(0)} s; its walking policy is blind and was trained on flat ground)`
+            ? scenario.planet
+              ? `tripped on the craters and rocks (typical after ~${gait!.meanTripS!.toFixed(0)} s; its walking policy is blind and was trained on flat ground under Earth gravity)`
+              : `tripped on the ${scenario.ground === "venera9" ? "boulder slope" : "rock plates"} (typical after ~${gait!.meanTripS!.toFixed(0)} s; its walking policy is blind and was trained on flat ground)`
             : `motor torque down to ${(torque * 100).toFixed(0)}%, below the ${(walkMin * 100).toFixed(0)}% it needs on this ground`;
       emit(t, "fail", "Robot falls", `Can no longer walk: ${why}.`);
     }
