@@ -1,5 +1,6 @@
 import type {
   BatteryId,
+  HydraulicId,
   CameraId,
   ElectronicsId,
   LubricantId,
@@ -20,7 +21,8 @@ export type Mechanics =
       /** Visual finish only. */
       finish?: "stock" | "white" | "titanium";
     }
-  | { kind: "static"; shape: "lander" | "box" };
+  | { kind: "static"; shape: "lander" | "box" }
+  | { kind: "wheeled"; model: "skidsteer" };
 
 export interface DescentStage {
   /** Stage becomes active once altitude drops below this [km]. */
@@ -93,6 +95,14 @@ export interface VehicleBuild {
     sizeFactor: number;
   };
   camera?: CameraId;
+  /** Pneumatic tyres (rubber) or metal wheels. */
+  tires?: { material: MaterialId; massKg: number };
+  /** Hydraulic circuit (lift arms, steering). */
+  hydraulics?: { part: HydraulicId; massKg: number };
+  /** What drives the vehicle. Combustion needs oxygen, which Venus air doesn't have. */
+  powerplant?: { kind: "diesel"; powerKw: number } | { kind: "electric"; powerKw: number };
+  /** Paint over the outer shell, if any. */
+  paint?: MaterialId;
   pcm?: { material: MaterialId; massKg: number };
   /** Active cooler (Stirling-class heat pump) pumping from the electronics bay to the skin. */
   cooler?: { electricW: number; carnotFraction: number; setpointK: number };

@@ -174,7 +174,45 @@ const sealedBox: VehicleBuild = {
   },
 };
 
-export const VEHICLES: VehicleBuild[] = [optimus, g1, g1Hardened, venera13, sealedBox];
+const cat262: VehicleBuild = {
+  id: "cat262",
+  name: "CAT 262D3 skid steer",
+  tagline: "Stock diesel machine. It can't even start.",
+  fidelity: "approximation",
+  notes: [
+    "Official specs: 3,763 kg operating weight, 2.99 m long (3.71 m with bucket), 2.11 m tall, 1.68 m wide over 12x16.5 tyres, 55.4 kW Cat C3.3B diesel, 1,225 kg rated capacity.",
+    "Venus air has no oxygen to burn, so the stock diesel cannot run at all. Switch the powerplant to battery-electric to see what else fails.",
+    "Assumed: steel frame and panels (quenched & tempered steel), polyester powder-coat paint, rubber tyres, mineral hydraulic oil with nitrile seals, automotive-grade ECU, 12 V lead-acid starter battery.",
+    "Mechanics: a rigid-body skid-steer in MuJoCo with the real footprint and mass on the same Venera heightfield; the lift arms are held by a hydraulic position actuator.",
+  ],
+  mechanics: { kind: "wheeled", model: "skidsteer" },
+  massKg: 3763,
+  exteriorAreaM2: 22,
+  charLengthM: 1.6,
+  skin: { material: "steel4140", massKg: 450, emissivity: 0.9 },
+  paint: "powderCoat",
+  frame: { material: "steel4140", massKg: 2300, loadFraction: 0.3 },
+  enclosure: { kind: "open", internalExposure: 0.35 },
+  insulation: { material: "aerogel", thicknessMm: 0 },
+  electronics: { part: "siAutomotive", solder: "sac305", massKg: 4, powerW: 60 },
+  battery: { part: "leadAcid", capacityWh: 1100 },
+  motors: {
+    magnet: "ndfebSH",
+    winding: "classH",
+    lubricant: "grease",
+    massKg: 120,
+    electricW: 20000,
+    heatFraction: 0.12,
+    sizeFactor: 1,
+  },
+  tires: { material: "tireRubber", massKg: 180 },
+  hydraulics: { part: "mineral", massKg: 60 },
+  powerplant: { kind: "diesel", powerKw: 55.4 },
+  payloadMassKg: 0,
+  initialTempK: cToK(20),
+};
+
+export const VEHICLES: VehicleBuild[] = [optimus, g1, g1Hardened, cat262, venera13, sealedBox];
 
 export function vehicleById(id: string): VehicleBuild | undefined {
   return VEHICLES.find((v) => v.id === id);

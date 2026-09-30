@@ -61,6 +61,14 @@ const ELECTRONICS_TABLE = {
   siAutomotive: { id: "siAutomotive", category: "electronics", name: "Automotive silicon (AEC-Q100 grade 0)", warnK: c(150), failK: c(175) },
   siMilitary: { id: "siMilitary", category: "electronics", name: "Military silicon (-55-125 °C)", warnK: c(125), failK: c(150) },
   soi: { id: "soi", category: "electronics", name: "High-temp SOI (225 °C class)", warnK: c(225), failK: c(300) },
+  gan: {
+    id: "gan",
+    category: "electronics",
+    name: "GaN HEMT (high-temp demo class)",
+    warnK: c(350),
+    failK: c(500),
+    notes: "GaN transistors have been run at 500 °C+ for hours to days in labs; lifetime at 460 °C is still an open question. Approximate.",
+  },
   sicJfet: {
     id: "sicJfet",
     category: "electronics",
@@ -85,6 +93,17 @@ const BATTERIES_TABLE = {
     notes: "Separator melts ~130 °C; thermal runaway releases more than the stored electrical energy.",
   },
   lfp: { id: "lfp", category: "battery", name: "LiFePO4", warnK: c(60), failK: c(220), minOperatingK: c(-20), whPerKg: 120, runawayFactor: 0.6 },
+  leadAcid: {
+    id: "leadAcid",
+    category: "battery",
+    name: "Lead-acid (12 V starter)",
+    warnK: c(50),
+    failK: c(110),
+    minOperatingK: c(-30),
+    whPerKg: 35,
+    runawayFactor: 0,
+    notes: "Water-based electrolyte boils off above ~110 °C; the lead grids themselves melt at 327 °C.",
+  },
   silverZinc: {
     id: "silverZinc",
     category: "battery",
@@ -105,6 +124,17 @@ const BATTERIES_TABLE = {
     whPerKg: 150,
     runawayFactor: 0,
     notes: "Runs molten at ~300-350 °C. Venus ambient is past its comfort zone.",
+  },
+  zebra: {
+    id: "zebra",
+    category: "battery",
+    name: "Sodium-nickel chloride (ZEBRA)",
+    warnK: c(400),
+    failK: c(450),
+    minOperatingK: c(250),
+    whPerKg: 120,
+    runawayFactor: 0,
+    notes: "Molten-salt EV battery (270-350 °C). Needs heat to work, but Venus is ~100 °C past its rating.",
   },
   thermal: {
     id: "thermal",
@@ -237,6 +267,39 @@ const CAMERAS_TABLE = {
   hardened: { id: "hardened", category: "camera", name: "Vidicon/high-temp imager", warnK: c(150), failK: c(250) },
 } as const satisfies Record<string, GenericPart>;
 export const CAMERAS: Record<keyof typeof CAMERAS_TABLE, GenericPart> = CAMERAS_TABLE;
+
+export interface HydraulicPart extends PartBase {
+  category: "hydraulic";
+}
+
+/** Hydraulic fluids + seals: the first failure is usually the seals, then the fluid cracks. */
+const HYDRAULICS_TABLE = {
+  mineral: {
+    id: "mineral",
+    category: "hydraulic",
+    name: "Mineral hydraulic oil + nitrile seals",
+    warnK: c(90),
+    failK: c(150),
+    notes: "Nitrile seals harden and leak past ~120-150 °C; oil viscosity collapses and it cracks thermally above ~250 °C.",
+  },
+  syntheticEster: {
+    id: "syntheticEster",
+    category: "hydraulic",
+    name: "Synthetic ester + Viton seals",
+    warnK: c(150),
+    failK: c(220),
+  },
+  ppe: {
+    id: "ppe",
+    category: "hydraulic",
+    name: "Polyphenyl ether + metal seals",
+    warnK: c(320),
+    failK: c(450),
+    notes: "The most heat-stable hydraulic fluid family (jet engines, ~450 °C). Right at the edge on Venus.",
+  },
+} as const satisfies Record<string, HydraulicPart>;
+export const HYDRAULICS: Record<keyof typeof HYDRAULICS_TABLE, HydraulicPart> = HYDRAULICS_TABLE;
+export type HydraulicId = keyof typeof HYDRAULICS_TABLE;
 
 export type ElectronicsId = keyof typeof ELECTRONICS_TABLE;
 export type BatteryId = keyof typeof BATTERIES_TABLE;

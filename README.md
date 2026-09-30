@@ -12,6 +12,11 @@ Everything runs client-side:
 - **Failures**: per-part datasheet limits for silicon grades, SiC, solders, Li-ion runaway, magnet demagnetization, winding insulation, lubricants, seals, frame yield strength vs temperature, and hull buckling.
 - **Walking**: the real Unitree walking policies (G1, H1) running in MuJoCo WASM with Venus gravity, CO₂ density and wind. Motor torque is scaled live by the thermal model, so robots slow down, stumble and collapse when their parts do.
 - **Descent**: terminal-velocity descent through the VIRA density profile with parachute and aerobraking-disk stages.
+- **Ground**: generated from the Venera 9/13/14 panoramas and measurements. Venera 14 has layered basalt plates with little soil, Venera 13 has plates in loose dark sediment, and Venera 9 is a 17° talus slope of angular boulders up to 60 cm. The same height function is MuJoCo's collision heightfield, so what you see is what the feet and wheels hit.
+- **Buoyancy**: MuJoCo's fluid model has none, so it's applied per body from the displaced solid volume. Open bodies are flooded with CO₂, so only their solid material counts.
+- **Bending metal**: thighs and shins are cut and rejoined with elastic-perfectly-plastic hinges. Their plastic moment follows the frame's hot yield strength, so limbs bend under load and stay bent.
+- **Optics**: spectral Rayleigh extinction for CO₂ at the local density (visibility ~1 km in green, less in blue), cloud-deck Mie haze, and purely diffuse light (3–3.5 klux measured by Venera 13/14; no direct sunbeam reaches the ground).
+- **Vehicles**: a CAT 262D3 skid steer from the official specs. Its diesel can't run (no oxygen). The battery-electric conversion drives until its ECU, tyres and hydraulics give out.
 
 ## Validation
 
@@ -21,7 +26,7 @@ Everything runs client-side:
 | Venera 13 touchdown speed | ~7.5 m/s | 7.0 m/s |
 | Venera 13 surface survival | 127 min | ~2.1 h (calibrated) |
 | Walking policy, TS vs PyTorch | identical | matches to 1e-4 |
-| Unitree policies under Venus gravity + 65 kg/m³ CO₂ | — | still walk; fall below ~58% (G1) / ~63% (H1) torque |
+| Walking on Venus (gravity, 65 kg/m³ CO₂, buoyancy, spec mass) | — | flat ground: both walk; Venera plates: Optimus-class walks, G1 trips after ~2–7 s (blind policy trained on flat ground); Venera 9 boulder slope: all trip within ~3 s. See `src/sim/data/walking.json` |
 
 Venera 13's hull, insulation and heat-sink details aren't published, so its model is **calibrated** to reproduce the 127 minutes, not predicted. Every vehicle is labelled with its fidelity.
 

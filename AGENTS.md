@@ -21,6 +21,8 @@ Browser sandbox for physics experiments on Venus: drop a robot, lander or custom
   - `vehicles/`: `VehicleBuild` presets and the build → thermal network generator
   - `mission/run.ts`: runs an experiment and returns the series, events and verdict
   - `robots/policy.ts`: Unitree walking policy (LSTM + MLP) ported to TS
+  - `robots/robot-world.ts`, `robots/skidsteer-world.ts`: MuJoCo worlds (terrain heightfield, buoyancy, spec mass, plastic hinges), shared by the browser and Node tests
+  - `terrain/terrain.ts`: the Venera-derived ground. It is one function used for both collision and rendering, so never render terrain from anything else
 - `src/components/lab/` is the UI: panels, uPlot charts, and the R3F scene. MuJoCo runs through the official `@mujoco/mujoco` WASM bindings.
 - `src/lib/lab-store.ts`: zustand store (config, result, playback, share links).
 - `tools/` is Python (uv) for offline data baking: `bake_co2.py` (CoolProp) and `bake_robots.py` (meshes, policy weights, reference fixtures).
@@ -39,4 +41,6 @@ Browser sandbox for physics experiments on Venus: drop a robot, lander or custom
 - `pnpm dev` starts the app (the dev server uses port 3217 in `.claude/launch.json`)
 - `pnpm test`, `pnpm typecheck`, `pnpm lint`, `pnpm build`
 - `pnpm bake:co2`, `pnpm bake:robots` (needs `uv`; re-run after changing tools/)
-- `V=venera13 EL=1500 npx tsx scripts/inspect.ts` prints an experiment's timeline in the terminal
+- `V=venera13 EL=1500 npx tsx scripts/inspect.ts` prints an experiment's timeline in the terminal (`G=venera14`, `S=surface`, `A=walking`)
+- `npx tsx scripts/calibrate-walking.ts` reruns the walking calibration per robot and terrain. Rerun it after changing terrain, robots or masses.
+- MuJoCo gotchas: MJCF angles default to degrees unless `<compiler angle="radian">`. MuJoCo applies no buoyancy. Frictionloss creeps under sustained load (so don't use it as a rigid lock).

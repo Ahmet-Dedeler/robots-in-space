@@ -14,6 +14,7 @@ import { LanderView } from "./scene/LanderView";
 import { TerrainView } from "./scene/TerrainView";
 import { useTerrain } from "./scene/useScene";
 import { VenusEnvironment } from "./scene/VenusEnvironment";
+import { WheeledView } from "./scene/WheeledView";
 
 /** Advances the experiment clock every rendered frame. */
 function Ground() {
@@ -75,7 +76,7 @@ function Hud() {
         <Chip label="Power" value={st.power ? `${Math.round(st.batteryWh)} Wh` : "none"} tone={st.power ? "ok" : "bad"} />
         {result.build.motors && (
           <Chip
-            label="Torque"
+            label={result.build.mechanics.kind === "wheeled" ? "Drive" : "Torque"}
             value={`${Math.round(st.torqueFraction * 100)}%`}
             tone={st.torqueFraction >= Math.max(0.8, walkMin + 0.15) ? "ok" : st.torqueFraction >= walkMin ? "warn" : "bad"}
           />
@@ -91,20 +92,26 @@ export default function Viewport() {
   const [status, setStatus] = useState<{ ok: boolean; err?: string } | null>(null);
   const onReady = useCallback((ok: boolean, err?: string) => setStatus({ ok, err }), []);
   const humanoid = mech.kind === "humanoid";
-  const key = humanoid ? `${mech.robot}-${mech.finish ?? "stock"}` : mech.shape;
+  const key = mech.kind === "humanoid" ? `${mech.robot}-${mech.finish ?? "stock"}` : mech.kind === "wheeled" ? mech.model : mech.shape;
 
   return (
     <div className="relative h-full w-full overflow-hidden bg-[#b8743a]">
       <Canvas
         key={key}
         dpr={[1, 2]}
-        camera={{ position: humanoid ? [2.6, 1.6, 3.2] : [5, 3.2, 6.5], fov: 45, near: 0.03, far: 12000 }}
+        camera={{ position: humanoid ? [2.6, 1.6, 3.2] : mech.kind === "wheeled" ? [6, 3.5, 7.5] : [5, 3.2, 6.5], fov: 45, near: 0.03, far: 12000 }}
         gl={{ antialias: true, logarithmicDepthBuffer: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.0 }}
       >
         <PlaybackDriver />
         <VenusEnvironment />
         <Ground />
-        {mech.kind === "humanoid" ? <HumanoidView robot={mech.robot} finish={mech.finish} onReady={onReady} /> : <LanderView shape={mech.shape} />}
+        {mech.kind === "humanoid" ? (
+          <HumanoidView robot={mech.robot} finish={mech.finish} onReady={onReady} />
+        ) : mech.kind === "wheeled" ? (
+          <WheeledView />
+        ) : (
+          <LanderView shape={mech.shape} />
+        )}
         <OrbitControls makeDefault enableDamping maxPolarAngle={Math.PI / 2 - 0.04} minDistance={0.8} maxDistance={60} />
         {/* Under purely diffuse light, ambient occlusion is what shades the ground and the robot. */}
         <EffectComposer>

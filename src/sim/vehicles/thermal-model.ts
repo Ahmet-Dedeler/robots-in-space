@@ -15,7 +15,7 @@ import { MATERIALS, type MaterialId } from "../materials/materials";
 import type { Exposure, ThermalLink, ThermalNode } from "../thermal/network";
 import type { VehicleBuild } from "./types";
 
-export type Role = "skin" | "frame" | "hull" | "motors" | "electronics" | "battery" | "camera" | "pcm" | "payload";
+export type Role = "skin" | "frame" | "hull" | "motors" | "electronics" | "battery" | "camera" | "pcm" | "payload" | "tires" | "hydraulics";
 
 export interface ThermalModel {
   nodes: ThermalNode[];
@@ -140,6 +140,28 @@ export function buildThermalModel(b: VehicleBuild, batteryWhPerKg: number): Ther
       exposure: { area, emissivity: 0.6, lengthM: 0.08, convFactor: sealed ? 0.6 : cavity, seriesR: 0 },
     });
     link(motors, frame, 400 * 0.3 * area);
+  }
+
+  if (b.tires) {
+    const m = MATERIALS[b.tires.material];
+    // Tyres are thin-walled toroids: lots of area per kg, fully exposed.
+    const area = compactArea(b.tires.massKg, m.density, 6);
+    const tires = add("tires", {
+      label: `Tyres (${m.name})`,
+      C: b.tires.massKg * m.cp,
+      exposure: { area, emissivity: m.emissivity, lengthM: 0.4, convFactor: 1, seriesR: 0 },
+    });
+    link(tires, frame, 20); // through steel rims and hubs
+  }
+
+  if (b.hydraulics) {
+    const area = compactArea(b.hydraulics.massKg, 900, 3);
+    const hyd = add("hydraulics", {
+      label: "Hydraulic oil & seals",
+      C: b.hydraulics.massKg * 1900,
+      exposure: { area, emissivity: 0.8, lengthM: 0.1, convFactor: cavity, seriesR: 0 },
+    });
+    link(hyd, frame, 30);
   }
 
   if (b.camera) {

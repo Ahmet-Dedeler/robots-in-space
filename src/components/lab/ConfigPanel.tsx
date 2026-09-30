@@ -12,13 +12,14 @@ import {
   BATTERIES,
   CAMERAS,
   ELECTRONICS,
+  HYDRAULICS,
   LUBRICANTS,
   MAGNETS,
   SEALS,
   SOLDERS,
   WINDINGS,
 } from "@/sim/materials/components";
-import { INSULATIONS, MATERIALS, PCMS, STRUCTURAL, type MaterialId } from "@/sim/materials/materials";
+import { INSULATIONS, MATERIALS, PCMS, SHELLS, STRUCTURAL, type MaterialId } from "@/sim/materials/materials";
 import { TERRAINS, type TerrainId } from "@/sim/terrain/terrain";
 import { VEHICLES } from "@/sim/vehicles/library";
 import type { VehicleBuild } from "@/sim/vehicles/types";
@@ -28,7 +29,7 @@ const opts = <T extends Record<string, { id: string; name: string }>>(db: T) =>
   Object.values(db).map((p) => ({ value: p.id as keyof T & string, label: p.name }));
 const matOpts = (list: { id: string; name: string }[]) => list.map((m) => ({ value: m.id as MaterialId, label: m.name }));
 
-const SKIN_MATERIALS = [...STRUCTURAL, MATERIALS.pcabs, MATERIALS.peek];
+const SKIN_MATERIALS = SHELLS;
 
 export function makeCooler(b: VehicleBuild, watts: number): VehicleBuild["cooler"] {
   if (watts <= 0) return undefined;
@@ -44,6 +45,7 @@ export function ConfigPanel() {
   const resetBuild = useLab((s) => s.resetBuild);
   const { build: b, scenario: sc } = config;
   const humanoid = b.mechanics.kind === "humanoid";
+  const wheeled = b.mechanics.kind === "wheeled";
   const site = SITES.find((s) => s.elevationM === sc.elevationM && s.ground === sc.ground)?.id ?? SITES.find((s) => s.elevationM === sc.elevationM)?.id ?? "custom";
 
   return (
@@ -119,12 +121,12 @@ export function ConfigPanel() {
             onChange={(k) => updateScenario({ start: k === "descent" ? { kind: "descent", fromKm: 62 } : { kind: "surface" } })}
           />
         )}
-        {humanoid && (
+        {(humanoid || wheeled) && (
           <Segmented
             value={sc.activity}
             options={[
-              { value: "walking", label: "Walking" },
-              { value: "idle", label: "Standing" },
+              { value: "walking", label: humanoid ? "Walking" : "Driving" },
+              { value: "idle", label: humanoid ? "Standing" : "Parked" },
             ]}
             onChange={(a) => updateScenario({ activity: a })}
           />
@@ -267,6 +269,43 @@ export function ConfigPanel() {
           <SelectField label="Cameras" value={b.camera} options={opts(CAMERAS)} onChange={(c) => update((x) => ({ ...x, camera: c }))} />
         )}
       </Section>
+
+      {wheeled && b.powerplant && (
+        <Section title="Drivetrain">
+          <Segmented
+            value={b.powerplant.kind}
+            options={[
+              { value: "diesel", label: `Diesel (stock)` },
+              { value: "electric", label: "Battery-electric" },
+            ]}
+            onChange={(k) =>
+              update((x) => ({
+                ...x,
+                powerplant: { kind: k, powerKw: x.powerplant?.powerKw ?? 55 },
+                // An electric conversion needs a traction pack instead of a 12 V starter battery.
+                battery: k === "electric" ? { part: "lfp", capacityWh: 60000 } : { part: "leadAcid", capacityWh: 1100 },
+              }))
+            }
+          />
+          {b.tires && (
+            <SelectField
+              label="Tyres / wheels"
+              value={b.tires.material}
+              options={matOpts(Object.values(MATERIALS).filter((m) => ["tireRubber", "silicone", "steel4140", "ti64", "inconel625"].includes(m.id)))}
+              hint={MATERIALS[b.tires.material].kind === "metal" ? "Rigid metal wheels: no rubber to lose" : undefined}
+              onChange={(m) => update((x) => ({ ...x, tires: x.tires && { ...x.tires, material: m } }))}
+            />
+          )}
+          {b.hydraulics && (
+            <SelectField
+              label="Hydraulic fluid & seals"
+              value={b.hydraulics.part}
+              options={opts(HYDRAULICS)}
+              onChange={(h) => update((x) => ({ ...x, hydraulics: x.hydraulics && { ...x.hydraulics, part: h } }))}
+            />
+          )}
+        </Section>
+      )}
 
       {b.motors && (
         <Section title="Actuators">

@@ -13,6 +13,7 @@ import {
   BATTERIES,
   CAMERAS,
   ELECTRONICS,
+  HYDRAULICS,
   LUBRICANTS,
   MAGNETS,
   SEALS,
@@ -138,6 +139,7 @@ export function runExperiment(build: VehicleBuild, scenario: Scenario): RunResul
   let frameOk = true;
   let breached = false;
   let lubricantFactor = 1;
+  let tiresOk = true;
   let batteryWh = build.battery.capacityWh;
   let magnetPeakK = build.initialTempK;
   let deathS: number | null = null;
@@ -146,10 +148,21 @@ export function runExperiment(build: VehicleBuild, scenario: Scenario): RunResul
   let controllerOkPrev = true;
 
   const humanoid = build.mechanics.kind === "humanoid";
+  const wheeled = build.mechanics.kind === "wheeled";
+  const mobile = humanoid || wheeled;
+  // Combustion engines need oxygen. Venus air is 96.5% CO2 + 3.5% N2 with only trace O2.
+  const engineRuns = build.powerplant?.kind !== "diesel";
   const gait = humanoid ? walkingFor(build, scenario.ground) : null;
   const walkMin = gait?.minTorque ?? 0;
   const magnet = build.motors ? MAGNETS[build.motors.magnet] : undefined;
 
+  if (build.powerplant?.kind === "diesel")
+    emit(
+      0,
+      "fatal",
+      "Diesel engine can't run",
+      `No oxygen: Venus air is 96.5% CO2 and 3.5% N2. The ${build.powerplant.powerKw} kW engine can't combust, so the machine can't move; only the starter battery powers the electronics.`,
+    );
   if (battery.minOperatingK > build.initialTempK)
     emit(0, "info", "Thermal battery activated", "Pyrotechnic heater melts the salt electrolyte so the battery can run.", "battery");
 
@@ -176,9 +189,16 @@ export function runExperiment(build: VehicleBuild, scenario: Scenario): RunResul
     watch(LUBRICANTS[build.motors.lubricant], R.motors, "Joint lubricant", () => (lubricantFactor = 0.6));
   }
   if (build.camera) watch(CAMERAS[build.camera], R.camera, "Cameras");
+  if (build.hydraulics)
+    watch(HYDRAULICS[build.hydraulics.part], R.hydraulics, "Hydraulics", () => {
+      emit(tNow, "fail", "Lift arms drop", "Seals leak and the oil cracks: no hydraulic pressure left to hold the arms.", "hydraulics");
+    });
   if (build.enclosure.kind === "sealed") watch(SEALS[build.enclosure.seal], R.hull, "Hull seals", () => breach("Seals failed"));
 
-  const skinMat = MATERIALS[build.skin.material];
+  // Events for the outer surface follow the paint if there is one (it fails long before steel does).
+  const skinMat = MATERIALS[build.paint ?? build.skin.material];
+  const tireMat = build.tires ? MATERIALS[build.tires.material] : undefined;
+  let tireWarned = false;
   let skinSoftWarned = false;
   let skinMeltWarned = false;
   let skinCharWarned = false;
@@ -257,12 +277,14 @@ export function runExperiment(build: VehicleBuild, scenario: Scenario): RunResul
     if (magnet && R.motors !== undefined) magnetPeakK = Math.max(magnetPeakK, net.T[R.motors]);
     const magnetFrac = magnet && R.motors !== undefined ? magnetTorqueFraction(magnet, net.T[R.motors], magnetPeakK) : 1;
     const sizeFrac = build.motors && magnet ? Math.min(1, magnet.relativeTorque * build.motors.sizeFactor) : 1;
-    const torque = build.motors ? (windingOk ? magnetFrac * sizeFrac * lubricantFactor : 0) : 0;
+    const torque = build.motors ? (windingOk ? magnetFrac * sizeFrac * lubricantFactor : 0) * (engineRuns ? 1 : 0) : 0;
     const frameYield = yieldFraction(frameMat, net.T[R.frame!]);
-    const walking = humanoid && scenario.activity === "walking" && landedS !== null;
+    const walking = mobile && scenario.activity === "walking" && landedS !== null;
     // Blind walking policies trip on rough ground even when healthy (MuJoCo calibration).
     const tripped = walking && gait !== null && !gait.walksAtFull && gait.meanTripS !== null && landedS !== null && t - landedS >= gait.meanTripS;
-    const canWalk = humanoid && controller && frameOk && torque >= walkMin && !tripped;
+    const canWalk = humanoid
+      ? controller && frameOk && torque >= walkMin && !tripped
+      : wheeled && controller && engineRuns && frameOk && torque >= 0.3;
 
     if (controllerOkPrev && !controller && deathS === null) {
       deathS = t;
@@ -271,8 +293,14 @@ export function runExperiment(build: VehicleBuild, scenario: Scenario): RunResul
       stopAt = Math.min(maxT, t + Math.max(300, 0.25 * t));
     }
     controllerOkPrev = controller;
-    if (humanoid && walkStopS === null && !canWalk && landedS !== null) {
+    if (mobile && walkStopS === null && !canWalk && landedS !== null) {
       walkStopS = t;
+      if (wheeled) {
+        const why = !engineRuns ? "the diesel engine cannot run without oxygen" : !controller ? "controller dead" : !frameOk ? "frame yielded" : `drive torque down to ${(torque * 100).toFixed(0)}%`;
+        emit(t, "fail", "Machine stops", `Can no longer drive: ${why}.`);
+      }
+    }
+    if (humanoid && walkStopS === t && landedS !== null) {
       const why = !controller
         ? "controller dead"
         : !frameOk
@@ -390,13 +418,24 @@ export function runExperiment(build: VehicleBuild, scenario: Scenario): RunResul
       skinSoftWarned = true;
       emit(t, "warn", "Outer shell softening", `${skinMat.name} past its service limit (${kToC(skinMat.maxServiceK).toFixed(0)} °C).`, "skin");
     }
-    if (skinMat.meltK && !skinMeltWarned && Tskin > skinMat.meltK) {
+    if (skinMat.meltK && !skinMat.thermoset && !skinMeltWarned && Tskin > skinMat.meltK) {
       skinMeltWarned = true;
       emit(t, "warn", "Outer shell melting", `${skinMat.name}: flows at ${kToC(skinMat.meltK).toFixed(0)} °C and starts dripping.`, "skin");
     }
     if (skinMat.decomposeK && !skinCharWarned && Tskin > skinMat.decomposeK) {
       skinCharWarned = true;
       emit(t, "warn", "Outer shell charring", `${skinMat.name}: decomposes above ${kToC(skinMat.decomposeK).toFixed(0)} °C. No oxygen to burn, so it pyrolyses into char and fumes.`, "skin");
+    }
+    if (tireMat && R.tires !== undefined && tiresOk) {
+      const Tt = net.T[R.tires];
+      if (!tireWarned && tireMat.maxServiceK && Tt > tireMat.maxServiceK) {
+        tireWarned = true;
+        emit(t, "warn", "Tyres softening", `${tireMat.name} past ${kToC(tireMat.maxServiceK).toFixed(0)} °C: rubber reverts, pressure climbs.`, "tires");
+      }
+      if (tireMat.decomposeK && Tt > tireMat.decomposeK) {
+        tiresOk = false;
+        emit(t, "fail", "Tyres pyrolysing", `Rubber decomposes above ${kToC(tireMat.decomposeK).toFixed(0)} °C; the tyres collapse onto the steel rims.`, "tires");
+      }
     }
     if (build.enclosure.kind === "sealed" && !breached && R.hull !== undefined) {
       const { hull } = build.enclosure;
@@ -471,7 +510,9 @@ function headline(b: VehicleBuild, death: number | null, walkStop: number | null
   if (death === null) return `${b.name} is still working after ${formatDuration(end)}.`;
   if (landed === null || death < landed) return `${b.name} died during descent, ${formatDuration(death)} after the start.`;
   const alive = formatDuration(onSurface(death));
-  if (walkStop !== null && walkStop < death) return `Walked for ${formatDuration(onSurface(walkStop))}, dead after ${alive} on the surface.`;
+  const moved = b.mechanics.kind === "wheeled" ? "Drove" : "Walked";
+  if (walkStop !== null && walkStop <= (landed ?? 0) + 0.5 && b.mechanics.kind === "wheeled") return `Never moved; electronics dead after ${alive}.`;
+  if (walkStop !== null && walkStop < death) return `${moved} for ${formatDuration(onSurface(walkStop))}, dead after ${alive} on the surface.`;
   return `Survived ${alive} on the surface.`;
 }
 

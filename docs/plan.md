@@ -188,3 +188,16 @@ Every model shows a **fidelity badge**: validated / approximation / guess. Peopl
 - Hardened G1 (SiC, thermal battery, magnet-free motors, Ti frame): runs until its battery is empty, ~2 days idle.
 - Venera 13: 66 min descent, 7.0 m/s touchdown, ~2.1 h on the surface. Calibrated via insulation thickness (30 mm at k = 0.1).
 - Found while sweeping: structural struts matter. A strut conductance that was too high (5 W/K) capped the benefit of insulation. Real Ti struts are ~0.1 W/K; now 0.3 W/K.
+
+**2026-10-01, realism pass**
+- Terrain from Venera panoramas (Space Sci. Rev. 2023 sediment review: plates a few cm thick, V14 low sediment, V9 talus with ≤60×20 cm boulders on 15–20°, ~1500 kg/m³ at ~50% porosity). One function drives both rendering and the MuJoCo heightfield.
+- MuJoCo has **no buoyancy** in its fluid model (verified: acceleration at rest is unchanged with density 1000). Added by hand.
+- Walking calibration (walking.json):
+  - Optimus-class (H1 body at 57 kg) walks on V13/V14 plates at 0.34–0.37 m/s and falls on the V9 slope.
+  - G1 trips on plates after ~2–7 s.
+  - Everything falls on V9 within ~3 s.
+- Plastic yield hinges: frictionloss creeps, so they use an elastic spring plus return mapping on the rest angle.
+- Specs corrected: G1 has CFRP shells and a 0.42 kWh pack; Optimus is 57 kg with a 2.3 kWh / 52 V pack.
+- CAT 262D3 skid steer (official dims and mass). The diesel can't run on Venus: no oxygen.
+- Optics: CO₂ Rayleigh β(550 nm) ≈ 1e-3 /m at the surface, spectral (λ⁻⁴). Super-refraction bowl skipped, because Venera 9/10 images showed it doesn't appear.
+- Library: added high-temperature steels, superalloys, refractory metals, low-melting metals, ceramics and windows, PTFE, Vespel, silicone, tyre rubber, Kevlar, BMI and polyimide CFRP, C/C, GaN and ZEBRA batteries, and hydraulic fluids. Thermosets char but never drip.

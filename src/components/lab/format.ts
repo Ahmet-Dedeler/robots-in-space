@@ -21,8 +21,9 @@ export function fmtClock(s: number): string {
 /**
  * Categorical colors by part role (dark-surface steps of the validated
  * reference palette). Fixed per entity so a part keeps its color across
- * charts and vehicles. Motors (humanoids) and payload (sealed craft) never
- * appear together, so they share a slot.
+ * charts and vehicles. Roles that never appear on the same vehicle share a
+ * slot: motors (robots) / payload (sealed craft), camera / tyres, hull /
+ * hydraulics.
  */
 export const ROLE_COLOR: Record<Role, string> = {
   electronics: "#3987e5",
@@ -34,6 +35,8 @@ export const ROLE_COLOR: Record<Role, string> = {
   hull: "#008300",
   pcm: "#9085e9",
   camera: "#e66767",
+  tires: "#e66767",
+  hydraulics: "#008300",
 };
 
 export const AMBIENT_COLOR = "#8a847c";
@@ -56,4 +59,6 @@ export const ROLE_SHORT: Record<Role, string> = {
   camera: "Cameras",
   pcm: "Heat sink",
   payload: "Internals",
+  tires: "Tyres",
+  hydraulics: "Hydraulics",
 };

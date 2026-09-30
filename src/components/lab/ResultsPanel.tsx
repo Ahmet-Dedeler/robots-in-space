@@ -66,7 +66,7 @@ function Verdict() {
         </div>
       </div>
       <div className="grid grid-cols-3 gap-2">
-        <Metric label="On surface" value={surfaceTime(result)} sub={v.walkStopS !== null ? `walked ${formatDuration(Math.max(0, v.walkStopS - (v.landedS ?? 0)))}` : undefined} />
+        <Metric label="On surface" value={surfaceTime(result)} sub={v.walkStopS !== null ? `${result.build.mechanics.kind === "wheeled" ? "drove" : "walked"} ${formatDuration(Math.max(0, v.walkStopS - (v.landedS ?? 0)))}` : undefined} />
         <Metric
           label="Descent"
           value={v.landedS ? formatDuration(v.landedS) : "—"}
@@ -157,7 +157,10 @@ function Notes() {
           <li>Atmosphere: VIRA reference profiles (Seiff et al. 1985); real-gas CO₂ properties from CoolProp (supercritical near the surface).</li>
           <li>Heat: a lumped thermal network (skin, frame, hull, electronics, battery, motors, heat sink) with natural + forced convection correlations and radiation. Correlations are good to about ±20%.</li>
           <li>Failures: datasheet temperature limits per part; magnet torque from remanence loss; frame strength from yield-vs-temperature curves; hull buckling and yield.</li>
-          <li>Walking: the real Unitree policy in MuJoCo (WASM) with Venus gravity, 65 kg/m³ CO₂ and wind. Torque is scaled live by the thermal model.</li>
+          <li>Walking: the real Unitree policy in MuJoCo (WASM) with Venus gravity, 65 kg/m³ CO₂, wind and buoyancy (added by hand: MuJoCo&apos;s fluid model has none), bodies scaled to the spec mass. Torque is scaled live by the thermal model.</li>
+          <li>Ground: generated from the Venera 9/13/14 panoramas (layered basalt plates, sediment, boulder talus). The same height function is the collision heightfield, so feet and wheels hit what you see.</li>
+          <li>Bending: thighs and shins are split by elastic-perfectly-plastic hinges whose plastic moment follows the frame&apos;s hot yield strength, so limbs bend and stay bent.</li>
+          <li>Optics: spectral Rayleigh extinction of CO₂ at the local density, cloud-deck Mie extinction, diffuse-only light (no direct sunbeam reaches the surface).</li>
           <li>Descent: quasi-steady terminal velocity through the VIRA density profile.</li>
         </ul>
       </div>

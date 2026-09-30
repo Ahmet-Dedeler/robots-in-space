@@ -68,8 +68,9 @@ export function shellDamage(skin: Material, tempK: number): ShellDamage {
     const service = skin.maxServiceK ?? 373;
     const melt = skin.meltK ?? 500;
     const decompose = skin.decomposeK ?? melt + 120;
-    d.soft = smooth(service, melt, tempK);
-    d.melt = smooth(melt - 30, melt + 40, tempK);
+    d.soft = smooth(service, skin.thermoset ? decompose : melt, tempK);
+    // Thermosets never flow: they go straight from soft to charred.
+    d.melt = skin.thermoset ? 0 : smooth(melt - 30, melt + 40, tempK);
     // Pyrolysis (charring) from the decomposition onset over ~100 K.
     d.char = smooth(decompose, decompose + 100, tempK);
     d.sag = 0.012 * d.soft + 0.05 * d.melt;
