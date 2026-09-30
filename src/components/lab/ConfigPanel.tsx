@@ -19,6 +19,7 @@ import {
   WINDINGS,
 } from "@/sim/materials/components";
 import { INSULATIONS, MATERIALS, PCMS, STRUCTURAL, type MaterialId } from "@/sim/materials/materials";
+import { TERRAINS, type TerrainId } from "@/sim/terrain/terrain";
 import { VEHICLES } from "@/sim/vehicles/library";
 import type { VehicleBuild } from "@/sim/vehicles/types";
 import { FidelityBadge, Section, Segmented, SelectField, SliderField } from "./controls";
@@ -43,7 +44,7 @@ export function ConfigPanel() {
   const resetBuild = useLab((s) => s.resetBuild);
   const { build: b, scenario: sc } = config;
   const humanoid = b.mechanics.kind === "humanoid";
-  const site = SITES.find((s) => s.elevationM === sc.elevationM)?.id ?? "custom";
+  const site = SITES.find((s) => s.elevationM === sc.elevationM && s.ground === sc.ground)?.id ?? SITES.find((s) => s.elevationM === sc.elevationM)?.id ?? "custom";
 
   return (
     <div className="text-sm">
@@ -78,9 +79,16 @@ export function ConfigPanel() {
           options={[...SITES.map((s) => ({ value: s.id as string, label: s.name })), { value: "custom", label: "Custom elevation" }]}
           onChange={(id) => {
             const s = SITES.find((x) => x.id === id);
-            if (s) updateScenario({ elevationM: s.elevationM });
+            if (s) updateScenario({ elevationM: s.elevationM, ground: s.ground });
           }}
           hint={SITES.find((s) => s.id === site)?.note}
+        />
+        <SelectField
+          label="Ground"
+          value={sc.ground}
+          options={Object.values(TERRAINS).map((t) => ({ value: t.id as TerrainId, label: t.name }))}
+          hint={TERRAINS[sc.ground].note}
+          onChange={(g) => updateScenario({ ground: g })}
         />
         <SliderField
           label="Elevation"

@@ -1,0 +1,94 @@
+{
+  "generatedBy": "scripts/calibrate-walking.ts",
+  "seconds": 15,
+  "seeds": [
+    1982,
+    7,
+    314
+  ],
+  "command": [
+    0.5,
+    0,
+    0.1
+  ],
+  "results": {
+    "optimus": {
+      "venera14": {
+        "walksAtFull": true,
+        "minTorque": 0.79,
+        "meanTripS": null,
+        "metersPerS": 0.34
+      },
+      "venera13": {
+        "walksAtFull": true,
+        "minTorque": 0.73,
+        "meanTripS": null,
+        "metersPerS": 0.37
+      },
+      "venera9": {
+        "walksAtFull": false,
+        "minTorque": null,
+        "meanTripS": 2.5,
+        "metersPerS": 1.05
+      },
+      "flat": {
+        "walksAtFull": true,
+        "minTorque": 0.66,
+        "meanTripS": null,
+        "metersPerS": 0.48
+      }
+    },
+    "g1": {
+      "venera14": {
+        "walksAtFull": false,
+        "minTorque": null,
+        "meanTripS": 7.1,
+        "metersPerS": 0.42
+      },
+      "venera13": {
+        "walksAtFull": false,
+        "minTorque": null,
+        "meanTripS": 1.9,
+        "metersPerS": 0.44
+      },
+      "venera9": {
+        "walksAtFull": false,
+        "minTorque": null,
+        "meanTripS": 1.9,
+        "metersPerS": 0.41
+      },
+      "flat": {
+        "walksAtFull": true,
+        "minTorque": 0.66,
+        "meanTripS": null,
+        "metersPerS": 0.46
+      }
+    },
+    "g1-hardened": {
+      "venera14": {
+        "walksAtFull": false,
+        "minTorque": null,
+        "meanTripS": 2.2,
+        "metersPerS": 0.75
+      },
+      "venera13": {
+        "walksAtFull": false,
+        "minTorque": null,
+        "meanTripS": 2.9,
+        "metersPerS": 0.76
+      },
+      "venera9": {
+        "walksAtFull": false,
+        "minTorque": null,
+        "meanTripS": 1.6,
+        "metersPerS": 0.38
+      },
+      "flat": {
+        "walksAtFull": true,
+        "minTorque": 0.91,
+        "meanTripS": null,
+        "metersPerS": 0.6
+      }
+    }
+  }
+}

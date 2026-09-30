@@ -11,4 +11,10 @@ dependencies = [
   "mujoco>=3.3",
   "torch>=2.4",
   "pyyaml>=6.0",
+  "scipy>=1.18.1",
+  "shapely>=2.1.2",
+  "manifold3d>=3.5.4",
+  "mapbox-earcut>=2.1.0",
+  "rtree>=1.4.1",
+  "networkx>=3.7",
 ]

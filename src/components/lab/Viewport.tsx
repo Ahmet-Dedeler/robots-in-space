@@ -1,18 +1,25 @@
 "use client";
 
 import { OrbitControls } from "@react-three/drei";
+import { EffectComposer, N8AO } from "@react-three/postprocessing";
+import * as THREE from "three";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { useCallback, useState } from "react";
 import { autoWarp, useLab } from "@/lib/lab-store";
 import { cn } from "@/lib/utils";
-import { WALK_TORQUE_MIN } from "@/sim/vehicles/library";
-import { stateAt } from "@/sim/mission/run";
+import { stateAt, walkingFor } from "@/sim/mission/run";
 import { fmtBar, fmtC, fmtClock } from "./format";
 import { HumanoidView } from "./scene/HumanoidView";
 import { LanderView } from "./scene/LanderView";
+import { TerrainView } from "./scene/TerrainView";
+import { useTerrain } from "./scene/useScene";
 import { VenusEnvironment } from "./scene/VenusEnvironment";
 
 /** Advances the experiment clock every rendered frame. */
+function Ground() {
+  return <TerrainView terrain={useTerrain()} />;
+}
+
 function PlaybackDriver() {
   useFrame((_, dt) => useLab.getState().tick(Math.min(dt, 0.1)));
   return null;
@@ -42,7 +49,7 @@ function Hud() {
   const st = stateAt(result, t);
   const above = st.altitudeM - elevationM;
   const humanoid = result.build.mechanics.kind === "humanoid";
-  const walkMin = result.build.mechanics.kind === "humanoid" ? WALK_TORQUE_MIN[result.build.mechanics.robot] : 0;
+  const walkMin = walkingFor(result.build, result.scenario.ground)?.minTorque ?? 0.7;
   const w = warp ?? autoWarp(result);
   const iE = result.nodes.findIndex((n) => n.id === "electronics");
   const frameOk = st.frameYieldFraction >= result.build.frame.loadFraction;
@@ -90,15 +97,19 @@ export default function Viewport() {
     <div className="relative h-full w-full overflow-hidden bg-[#b8743a]">
       <Canvas
         key={key}
-        shadows
         dpr={[1, 2]}
-        camera={{ position: humanoid ? [2.6, 1.6, 3.2] : [5, 3.2, 6.5], fov: 45, near: 0.05, far: 2000 }}
-        gl={{ antialias: true }}
+        camera={{ position: humanoid ? [2.6, 1.6, 3.2] : [5, 3.2, 6.5], fov: 45, near: 0.03, far: 12000 }}
+        gl={{ antialias: true, logarithmicDepthBuffer: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.0 }}
       >
         <PlaybackDriver />
         <VenusEnvironment />
+        <Ground />
         {mech.kind === "humanoid" ? <HumanoidView robot={mech.robot} finish={mech.finish} onReady={onReady} /> : <LanderView shape={mech.shape} />}
-        <OrbitControls makeDefault enableDamping maxPolarAngle={Math.PI / 2 - 0.04} minDistance={1.2} maxDistance={60} />
+        <OrbitControls makeDefault enableDamping maxPolarAngle={Math.PI / 2 - 0.04} minDistance={0.8} maxDistance={60} />
+        {/* Under purely diffuse light, ambient occlusion is what shades the ground and the robot. */}
+        <EffectComposer>
+          <N8AO aoRadius={0.3} intensity={1.3} distanceFalloff={1} halfRes />
+        </EffectComposer>
       </Canvas>
       <Hud />
       {humanoid && status === null && (

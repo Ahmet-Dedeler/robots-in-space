@@ -46,8 +46,8 @@ export interface VehicleBuild {
 
   /** Total mass (descent dynamics, buoyancy) [kg]. */
   massKg: number;
-  /** Displaced volume (buoyancy) [m^3]. */
-  volumeM3: number;
+  /** Sealed craft: outer envelope volume for buoyancy [m^3]. Open bodies derive it from their parts. */
+  volumeM3?: number;
   /** Outer surface exposed to the atmosphere [m^2]. */
   exteriorAreaM2: number;
   /** Equivalent diameter for external convection [m]. */

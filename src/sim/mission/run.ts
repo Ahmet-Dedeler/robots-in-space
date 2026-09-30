@@ -23,8 +23,10 @@ import {
 } from "../materials/components";
 import { MATERIALS, curveAt, yieldFraction } from "../materials/materials";
 import { ThermalNetwork } from "../thermal/network";
-import { WALK_TORQUE_MIN } from "../vehicles/library";
+import walking from "../data/walking.json";
+import type { TerrainId } from "../terrain/terrain";
 import { buildThermalModel } from "../vehicles/thermal-model";
+import { displacedVolumeM3 } from "../vehicles/volume";
 import type { VehicleBuild } from "../vehicles/types";
 
 export type Activity = "walking" | "idle";
@@ -32,6 +34,8 @@ export type Activity = "walking" | "idle";
 export interface Scenario {
   /** Surface elevation relative to mean radius [m]. */
   elevationM: number;
+  /** Ground type at the site (Venera-derived terrain). */
+  ground: TerrainId;
   /** Surface wind [m/s]. */
   windMs: number;
   start: { kind: "surface" } | { kind: "descent"; fromKm: number };
@@ -142,7 +146,8 @@ export function runExperiment(build: VehicleBuild, scenario: Scenario): RunResul
   let controllerOkPrev = true;
 
   const humanoid = build.mechanics.kind === "humanoid";
-  const walkMin = build.mechanics.kind === "humanoid" ? WALK_TORQUE_MIN[build.mechanics.robot] : 0;
+  const gait = humanoid ? walkingFor(build, scenario.ground) : null;
+  const walkMin = gait?.minTorque ?? 0;
   const magnet = build.motors ? MAGNETS[build.motors.magnet] : undefined;
 
   if (battery.minOperatingK > build.initialTempK)
@@ -239,7 +244,7 @@ export function runExperiment(build: VehicleBuild, scenario: Scenario): RunResul
         if (stage >= 0) emit(t, "info", `${stages[s].label} deployed`, `At ${km.toFixed(1)} km.`);
         stage = s;
       }
-      const gEff = env.gravity * (1 - (env.densityKgM3 * build.volumeM3) / build.massKg);
+      const gEff = env.gravity * (1 - (env.densityKgM3 * displacedVolumeM3(build)) / build.massKg);
       speed = Math.sqrt((2 * build.massKg * Math.max(gEff, 0)) / (env.densityKgM3 * stages[s].cdA));
     } else if (landedS === null) {
       speed = 0;
@@ -255,7 +260,9 @@ export function runExperiment(build: VehicleBuild, scenario: Scenario): RunResul
     const torque = build.motors ? (windingOk ? magnetFrac * sizeFrac * lubricantFactor : 0) : 0;
     const frameYield = yieldFraction(frameMat, net.T[R.frame!]);
     const walking = humanoid && scenario.activity === "walking" && landedS !== null;
-    const canWalk = humanoid && controller && frameOk && torque >= walkMin;
+    // Blind walking policies trip on rough ground even when healthy (MuJoCo calibration).
+    const tripped = walking && gait !== null && !gait.walksAtFull && gait.meanTripS !== null && landedS !== null && t - landedS >= gait.meanTripS;
+    const canWalk = humanoid && controller && frameOk && torque >= walkMin && !tripped;
 
     if (controllerOkPrev && !controller && deathS === null) {
       deathS = t;
@@ -266,7 +273,13 @@ export function runExperiment(build: VehicleBuild, scenario: Scenario): RunResul
     controllerOkPrev = controller;
     if (humanoid && walkStopS === null && !canWalk && landedS !== null) {
       walkStopS = t;
-      const why = !controller ? "controller dead" : !frameOk ? "frame yielded" : `motor torque down to ${(torque * 100).toFixed(0)}%`;
+      const why = !controller
+        ? "controller dead"
+        : !frameOk
+          ? "frame yielded"
+          : tripped
+            ? `tripped on the ${scenario.ground === "venera9" ? "boulder slope" : "rock plates"} (typical after ~${gait!.meanTripS!.toFixed(0)} s; its walking policy is blind and was trained on flat ground)`
+            : `motor torque down to ${(torque * 100).toFixed(0)}%, below the ${(walkMin * 100).toFixed(0)}% it needs on this ground`;
       emit(t, "fail", "Robot falls", `Can no longer walk: ${why}.`);
     }
 
@@ -430,6 +443,20 @@ export function runExperiment(build: VehicleBuild, scenario: Scenario): RunResul
     durationS: t,
     computeMs: performance.now() - t0,
   };
+}
+
+interface Gait {
+  walksAtFull: boolean;
+  minTorque: number | null;
+  meanTripS: number | null;
+  metersPerS: number;
+}
+
+/** Walking capability from scripts/calibrate-walking.ts; falls back to the same robot's body. */
+export function walkingFor(build: VehicleBuild, ground: TerrainId): Gait | null {
+  const results = walking.results as Record<string, Record<string, Gait>>;
+  const byBuild = results[build.id] ?? (build.mechanics.kind === "humanoid" ? results[build.mechanics.robot === "h1" ? "optimus" : "g1"] : undefined);
+  return byBuild?.[ground] ?? byBuild?.flat ?? null;
 }
 
 export function formatDuration(s: number): string {

@@ -31,6 +31,8 @@ export interface PolicyJson {
     cmd_init: number[];
   };
   meshes: string[];
+  /** Plastic hinges added to thighs/shins by tools/bake_robots.py. */
+  yieldHinges?: { name: string; joints: string[]; lengthM: number; massSplit: [number, number] }[];
 }
 
 const sigmoid = (x: number) => 1 / (1 + Math.exp(-x));
@@ -118,14 +120,24 @@ export class WalkController {
   private counter = 0;
   /** Velocity command [vx, vy, yaw rate]. */
   command: [number, number, number];
+  /** qpos / qvel addresses of the actuated joints, in actuator order. */
+  private readonly qIdx: Int32Array;
+  private readonly vIdx: Int32Array;
 
-  constructor(p: PolicyJson) {
+  /**
+   * @param qIdx qpos address of each actuated joint (defaults to the floating-base layout 7..).
+   * @param vIdx qvel address of each actuated joint (defaults to 6..).
+   */
+  constructor(p: PolicyJson, qIdx?: ArrayLike<number>, vIdx?: ArrayLike<number>) {
     this.cfg = p.config;
     this.policy = new RecurrentPolicy(p);
     this.obs = new Float32Array(this.cfg.num_obs);
     this.action = new Float32Array(this.cfg.num_actions);
     this.target = Float32Array.from(this.cfg.default_angles);
     this.command = this.cfg.cmd_init.slice(0, 3) as [number, number, number];
+    const na = this.cfg.num_actions;
+    this.qIdx = Int32Array.from(qIdx ?? Array.from({ length: na }, (_, j) => 7 + j));
+    this.vIdx = Int32Array.from(vIdx ?? Array.from({ length: na }, (_, j) => 6 + j));
   }
 
   reset() {
@@ -147,7 +159,7 @@ export class WalkController {
   torques(qpos: ArrayLike<number>, qvel: ArrayLike<number>, out: Float64Array) {
     const { kps, kds } = this.cfg;
     for (let j = 0; j < this.cfg.num_actions; j++) {
-      out[j] = (this.target[j] - qpos[7 + j]) * kps[j] - qvel[6 + j] * kds[j];
+      out[j] = (this.target[j] - qpos[this.qIdx[j]]) * kps[j] - qvel[this.vIdx[j]] * kds[j];
     }
     return out;
   }
@@ -170,8 +182,8 @@ export class WalkController {
     o[5] = g[2];
     for (let k = 0; k < 3; k++) o[6 + k] = this.command[k] * c.cmd_scale[k];
     for (let j = 0; j < na; j++) {
-      o[9 + j] = (qpos[7 + j] - c.default_angles[j]) * c.dof_pos_scale;
-      o[9 + na + j] = qvel[6 + j] * c.dof_vel_scale;
+      o[9 + j] = (qpos[this.qIdx[j]] - c.default_angles[j]) * c.dof_pos_scale;
+      o[9 + na + j] = qvel[this.vIdx[j]] * c.dof_vel_scale;
       o[9 + 2 * na + j] = this.action[j];
     }
     o[9 + 3 * na] = Math.sin(2 * Math.PI * phase);

@@ -6,26 +6,18 @@
 import { cToK } from "../constants";
 import type { VehicleBuild } from "./types";
 
-/**
- * Torque fraction below which the stock unitree_rl_gym walking policy falls
- * over under Venus gravity + 65 kg/m^3 CO2 (MuJoCo sweep in
- * tools/, 15 s rollouts at 0.5 m/s command). G1 still walks, slower, at 0.6.
- */
-export const WALK_TORQUE_MIN = { g1: 0.58, h1: 0.63 } as const;
-
 const optimus: VehicleBuild = {
   id: "optimus",
   name: "Tesla Optimus (approx.)",
   tagline: "Stock humanoid, dropped on the surface as-is.",
   fidelity: "approximation",
   notes: [
-    "No public CAD or model exists. Mechanics use the Unitree H1 body (1.8 m, 47 kg) as a stand-in with its real walking policy.",
-    "Thermal/material numbers from public Optimus Gen 2 specs: ~57 kg, ~1.73 m, 2.3 kWh pack in the torso, automotive-grade AI computer.",
-    "Actuator magnets assumed NdFeB SH grade and class H windings (typical for EV/robot motors); frame assumed aluminum.",
+    "Tesla publishes no CAD or model. Mechanics use the Unitree H1 body (1.80 m vs Optimus 1.73 m) with its real walking policy, scaled to Optimus's 57 kg.",
+    "Public specs used: 173 cm, 57 kg, 2.3 kWh / 52 V pack in the torso, 28 body DOF, automotive-grade AI computer.",
+    "Assumed (not published): NdFeB SH magnets and class H windings (typical EV/robot motors), aluminium frame, PC/ABS covers.",
   ],
   mechanics: { kind: "humanoid", robot: "h1", finish: "white" },
   massKg: 57,
-  volumeM3: 0.05,
   exteriorAreaM2: 1.6,
   charLengthM: 0.15,
   skin: { material: "pcabs", massKg: 6, emissivity: 0.9 },
@@ -54,20 +46,20 @@ const g1: VehicleBuild = {
   tagline: "Real robot, real model, real walking policy.",
   fidelity: "approximation",
   notes: [
-    "Mechanics: official Unitree MJCF + pretrained walking policy from unitree_rl_gym (runs in your browser).",
-    "Thermal: 35 kg, ~0.5 kWh battery (9 Ah @ 54 V), aluminum + engineering plastic body. Internal layout guessed.",
+    "Mechanics: official Unitree MJCF + pretrained walking policy from unitree_rl_gym, scaled to the spec 35 kg (the model file weighs 32 kg).",
+    "Official specs: 1.32 m, 35 kg, aluminium-alloy frame, carbon-fibre composite shells, 9 Ah / 46.8 V (0.42 kWh) battery, PMSM joint motors up to 120 N m.",
+    "Assumed: NdFeB SH magnets, class H windings, commercial-grade compute. Internal layout guessed.",
   ],
   mechanics: { kind: "humanoid", robot: "g1" },
   massKg: 35,
-  volumeM3: 0.03,
   exteriorAreaM2: 1.1,
   charLengthM: 0.12,
-  skin: { material: "pcabs", massKg: 3, emissivity: 0.9 },
+  skin: { material: "cfrp", massKg: 3, emissivity: 0.85 },
   frame: { material: "al6061", massKg: 12, loadFraction: 0.35 },
   enclosure: { kind: "open", internalExposure: 0.35 },
   insulation: { material: "aerogel", thicknessMm: 0 },
   electronics: { part: "siCommercial", solder: "sac305", massKg: 2, powerW: 60 },
-  battery: { part: "liIon", capacityWh: 486 },
+  battery: { part: "liIon", capacityWh: 420 },
   motors: {
     magnet: "ndfebSH",
     winding: "classH",

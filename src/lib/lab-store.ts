@@ -9,6 +9,7 @@
  */
 import { create } from "zustand";
 import { runExperiment, type RunResult, type Scenario } from "@/sim/mission/run";
+import { SITES } from "@/sim/env/atmosphere";
 import { VEHICLES, vehicleById } from "@/sim/vehicles/library";
 import type { VehicleBuild } from "@/sim/vehicles/types";
 
@@ -51,8 +52,10 @@ export const clone = <T,>(x: T): T => structuredClone(x);
 
 export function defaultScenario(build: VehicleBuild): Scenario {
   const lander = build.mechanics.kind === "static" && build.descent;
+  const elevationM = build.homeElevationM ?? 0;
   return {
-    elevationM: build.homeElevationM ?? 0,
+    elevationM,
+    ground: SITES.find((x) => x.elevationM === elevationM)?.ground ?? "venera14",
     windMs: 0.5,
     start: lander ? { kind: "descent", fromKm: 62 } : { kind: "surface" },
     activity: build.mechanics.kind === "humanoid" ? "walking" : "idle",

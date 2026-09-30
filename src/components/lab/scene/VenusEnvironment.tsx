@@ -1,163 +1,103 @@
 "use client";
 
 /**
- * Venus look: thick orange haze, soft overcast light from everywhere, and
- * flat fractured basalt plates like the Venera 13/14 panoramas.
+ * Venus optics, from physics rather than taste:
  *
- * Haze follows altitude: bright and dense inside the cloud deck (48-70 km),
- * dimmer and redder below it, clearing to a pale sky above.
+ * - Extinction: Rayleigh scattering by CO2, beta = N * sigma(lambda), with
+ *   sigma(532 nm) = 1.24e-30 m^2 (Sneep & Ubachs 2005) scaled by lambda^-4.
+ *   At the surface (N ~ 8.9e26 m^-3) beta(550 nm) ~ 1e-3 m^-1: green light
+ *   fades over ~1 km, blue much faster, red slower, so distant ground turns
+ *   reddish before vanishing. Below ~30 km there is almost no aerosol
+ *   (Moroz 2002), so this dominates visibility at the surface.
+ * - Cloud deck (48-70 km): H2SO4 droplets add grey Mie extinction of
+ *   ~1-3 km^-1 (Pioneer Venus LCPS, Knollenberg & Hunten 1980; approx.).
+ * - Light: the direct solar beam is gone after an optical depth of ~20+,
+ *   so the surface is lit only by diffuse light from the whole sky:
+ *   3-3.5 klux measured by Venera 13/14 (a dim overcast day), strongly
+ *   depleted in blue. No hard shadows; ambient occlusion does the shading.
  */
 import { useFrame } from "@react-three/fiber";
-import { useLayoutEffect, useMemo, useRef } from "react";
+import { useRef } from "react";
 import * as THREE from "three";
 import { useLab } from "@/lib/lab-store";
+import { atmosphere } from "@/sim/env/atmosphere";
 import { stateAt } from "@/sim/mission/run";
 
-function hazeFor(altKm: number): { color: THREE.Color; density: number; light: number } {
-  const below = new THREE.Color("#b8743a");
-  const cloud = new THREE.Color("#e8c690");
-  const above = new THREE.Color("#f3e6c8");
-  if (altKm < 48) {
-    const f = altKm / 48;
-    return { color: below.clone().lerp(cloud, f * 0.6), density: 0.012 + f * 0.01, light: 0.55 + f * 0.35 };
-  }
-  if (altKm < 70) return { color: cloud, density: 0.06, light: 1.1 };
-  return { color: above, density: 0.004, light: 1.6 };
+// Spectral fog: exp(-beta_rgb * d) per channel instead of three's grey fog.
+// beta_rgb = fogDensity * (lambda/550nm)^-4 for R=650, G=550, B=450 nm.
+THREE.ShaderChunk.fog_fragment = /* glsl */ `
+#ifdef USE_FOG
+  #ifdef FOG_EXP2
+    vec3 fogTransmit = exp(-fogDensity * vFogDepth * vec3(0.513, 1.0, 2.23));
+    gl_FragColor.rgb = mix(fogColor, gl_FragColor.rgb, fogTransmit);
+  #else
+    float fogFactor = smoothstep(fogNear, fogFar, vFogDepth);
+    gl_FragColor.rgb = mix(gl_FragColor.rgb, fogColor, fogFactor);
+  #endif
+#endif`;
+
+const SIGMA_550 = 1.24e-30 * (532 / 550) ** 4; // m^2 per CO2 molecule
+const AVOGADRO = 6.02214076e23;
+const M_CO2 = 0.04401;
+
+/** Extinction at 550 nm [1/m]: Rayleigh + approximate cloud/haze Mie. */
+export function extinction550(altitudeM: number): number {
+  const rho = atmosphere(altitudeM).densityKgM3;
+  const rayleigh = (rho / M_CO2) * AVOGADRO * SIGMA_550;
+  const km = altitudeM / 1000;
+  let mie = 0;
+  if (km > 31 && km <= 48) mie = 0.0002; // lower haze
+  else if (km > 48 && km <= 51) mie = 0.003; // lower cloud (largest droplets)
+  else if (km > 51 && km <= 57) mie = 0.0012; // middle cloud
+  else if (km > 57 && km <= 70) mie = 0.0015; // upper cloud
+  return rayleigh + mie;
 }
 
-function basaltTexture(): THREE.CanvasTexture {
-  const size = 512;
-  const canvas = document.createElement("canvas");
-  canvas.width = canvas.height = size;
-  const ctx = canvas.getContext("2d")!;
-  ctx.fillStyle = "#5a3d28";
-  ctx.fillRect(0, 0, size, size);
-  // Deterministic pseudo-random so the ground looks the same every load.
-  let seed = 7;
-  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-  // Tile-able Voronoi plates.
-  const pts: [number, number, number][] = [];
-  for (let i = 0; i < 70; i++) pts.push([rnd() * size, rnd() * size, rnd()]);
-  const img = ctx.getImageData(0, 0, size, size);
-  for (let y = 0; y < size; y += 1) {
-    for (let x = 0; x < size; x += 1) {
-      let d1 = Infinity;
-      let d2 = Infinity;
-      let shade = 0;
-      for (const [px, py, s] of pts) {
-        let dx = Math.abs(x - px);
-        let dy = Math.abs(y - py);
-        dx = Math.min(dx, size - dx);
-        dy = Math.min(dy, size - dy);
-        const d = dx * dx + dy * dy;
-        if (d < d1) {
-          d2 = d1;
-          d1 = d;
-          shade = s;
-        } else if (d < d2) d2 = d;
-      }
-      const edge = Math.sqrt(d2) - Math.sqrt(d1);
-      const crack = edge < 3 ? 0.35 : edge < 6 ? 0.7 : 1;
-      const grain = 0.9 + 0.2 * rnd();
-      const k = (0.75 + shade * 0.4) * crack * grain;
-      const i = (y * size + x) * 4;
-      img.data[i] = Math.min(255, 118 * k);
-      img.data[i + 1] = Math.min(255, 84 * k);
-      img.data[i + 2] = Math.min(255, 56 * k);
-      img.data[i + 3] = 255;
-    }
-  }
-  ctx.putImageData(img, 0, 0);
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(120, 120);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = 8;
-  return tex;
+/** Colour of the scattered light (airlight / sky) with altitude. */
+function airlight(km: number): THREE.Color {
+  const surface = new THREE.Color().setRGB(0.5, 0.27, 0.1); // deep orange: blue removed on the way down
+  const cloud = new THREE.Color().setRGB(0.95, 0.85, 0.62); // bright pale yellow inside the H2SO4 deck
+  const above = new THREE.Color().setRGB(0.85, 0.83, 0.78);
+  if (km < 48) return surface.clone().lerp(cloud, (km / 48) ** 2);
+  if (km < 70) return cloud;
+  return cloud.clone().lerp(above, Math.min(1, (km - 70) / 20));
 }
 
-function Rocks() {
-  const mesh = useRef<THREE.InstancedMesh>(null);
-  const count = 260;
-  const geometry = useMemo(() => new THREE.DodecahedronGeometry(1, 0), []);
-  useLayoutEffect(() => {
-    {
-      const m = mesh.current;
-      if (!m) return;
-      let seed = 3;
-      const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-      const o = new THREE.Object3D();
-      for (let i = 0; i < count; i++) {
-        const r = 4 + rnd() * 90;
-        const a = rnd() * Math.PI * 2;
-        const s = 0.05 + rnd() ** 3 * 0.8;
-        o.position.set(Math.cos(a) * r, s * 0.15, Math.sin(a) * r);
-        o.scale.set(s * (1 + rnd()), s * 0.35, s * (1 + rnd()));
-        o.rotation.set(0, rnd() * Math.PI, 0);
-        o.updateMatrix();
-        m.setMatrixAt(i, o.matrix);
-      }
-      m.instanceMatrix.needsUpdate = true;
-    }
-  }, []);
-  return (
-    <instancedMesh ref={mesh} args={[geometry, undefined, count]} receiveShadow castShadow>
-      <meshStandardMaterial color="#4a3222" roughness={0.95} flatShading />
-    </instancedMesh>
-  );
+/** Diffuse illuminance relative to the surface (~3.5 klux at the ground, much brighter up high). */
+function lightLevel(km: number): number {
+  const solar = atmosphere(km * 1000).solarSubsolarWm2;
+  return Math.pow(solar / 120, 0.45);
 }
 
 export function VenusEnvironment() {
-  const hemi = useRef<THREE.HemisphereLight>(null);
-  const sun = useRef<THREE.DirectionalLight>(null);
-  const ground = useMemo(() => (typeof document === "undefined" ? null : basaltTexture()), []);
   const fogRef = useRef<THREE.FogExp2>(null);
   const bgRef = useRef<THREE.Color>(null);
-  const groundRef = useRef<THREE.Group>(null);
+  const sky = useRef<THREE.HemisphereLight>(null);
+  const fill = useRef<THREE.DirectionalLight>(null);
 
   useFrame(() => {
-    const { result, playback, config } = useLab.getState();
+    const { result, playback } = useLab.getState();
     const st = stateAt(result, playback.t);
-    const altitudeKm = st.altitudeM / 1000;
-    if (groundRef.current) groundRef.current.visible = st.altitudeM - config.scenario.elevationM < 3000;
-    const h = hazeFor(altitudeKm);
+    const km = st.altitudeM / 1000;
     const fog = fogRef.current;
     if (fog) {
-      fog.color.lerp(h.color, 0.1);
-      fog.density += (h.density - fog.density) * 0.1;
+      fog.color.lerp(airlight(km), 0.2);
+      fog.density += (extinction550(st.altitudeM) - fog.density) * 0.2;
       bgRef.current?.copy(fog.color);
     }
-    if (hemi.current) hemi.current.intensity = 1.6 * h.light;
-    if (sun.current) sun.current.intensity = 0.9 * h.light;
+    const L = lightLevel(km);
+    if (sky.current) sky.current.intensity = 1.05 * L;
+    if (fill.current) fill.current.intensity = 1.1 * L;
   });
 
   return (
     <>
-      <fogExp2 ref={fogRef} attach="fog" args={["#b8743a", 0.015]} />
-      <color ref={bgRef} attach="background" args={["#b8743a"]} />
-      <hemisphereLight ref={hemi} args={["#ffd9a0", "#6b3d1f", 1.2]} />
-      <directionalLight
-        ref={sun}
-        position={[20, 40, 10]}
-        color="#ffc98a"
-        intensity={0.8}
-        castShadow
-        shadow-mapSize={[2048, 2048]}
-        shadow-camera-left={-12}
-        shadow-camera-right={12}
-        shadow-camera-top={12}
-        shadow-camera-bottom={-12}
-        shadow-bias={-0.0005}
-      />
-      {ground && (
-        <group ref={groundRef}>
-          <mesh rotation-x={-Math.PI / 2} receiveShadow>
-            <planeGeometry args={[800, 800]} />
-            <meshStandardMaterial map={ground} roughness={0.95} metalness={0} />
-          </mesh>
-          <Rocks />
-        </group>
-      )}
+      <fogExp2 ref={fogRef} attach="fog" args={["#9e5c26", 0.001]} />
+      <color ref={bgRef} attach="background" args={["#9e5c26"]} />
+      {/* Sky dome light: warm orange from above, dark basalt-bounced light from below (albedo ~0.1). */}
+      <hemisphereLight ref={sky} args={["#ffab5e", "#1c120b", 1.05]} />
+      {/* The brighter part of the overcast sky, toward the hidden Sun: very soft, no hard shadows. */}
+      <directionalLight ref={fill} position={[20, 80, 15]} color="#ffb870" intensity={1.1} />
     </>
   );
 }

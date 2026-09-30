@@ -12,7 +12,7 @@
  * the caller via `sample()`.
  */
 import { useFrame } from "@react-three/fiber";
-import { forwardRef, useImperativeHandle, useMemo, useRef } from "react";
+import { forwardRef, useImperativeHandle, useLayoutEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 
 let seed = 12345;
@@ -29,7 +29,10 @@ export interface DripsHandle {
 const MAX_DRIPS = 160;
 const MAX_POOLS = 500;
 
-export const MeltDrips = forwardRef<DripsHandle>(function MeltDrips(_, ref) {
+/** Ground height under a world point (three.js x, z) [m]. */
+export type GroundAt = (x: number, z: number) => number;
+
+export const MeltDrips = forwardRef<DripsHandle, { groundAt: GroundAt }>(function MeltDrips({ groundAt }, ref) {
   const drops = useRef<THREE.InstancedMesh>(null);
   const pools = useRef<THREE.InstancedMesh>(null);
   const state = useRef({
@@ -69,6 +72,12 @@ export const MeltDrips = forwardRef<DripsHandle>(function MeltDrips(_, ref) {
     },
   }));
 
+  // Instanced meshes start with identity matrices; show nothing until something drips.
+  useLayoutEffect(() => {
+    if (drops.current) drops.current.count = 0;
+    if (pools.current) pools.current.count = 0;
+  }, []);
+
   useFrame((_, dtRaw) => {
     const dt = Math.min(dtRaw, 0.05);
     const s = state.current;
@@ -81,13 +90,16 @@ export const MeltDrips = forwardRef<DripsHandle>(function MeltDrips(_, ref) {
       // Viscous melt stretches before letting go, then falls through dense CO2 (low terminal speed).
       s.vel[i] = Math.min(s.vel[i] + 8.87 * dt, 1.6);
       s.pos[i].y -= s.vel[i] * dt;
-      if (s.pos[i].y <= 0.003) {
+      const ground = groundAt(s.pos[i].x, s.pos[i].z);
+      if (s.pos[i].y <= ground + 0.003) {
         s.live[i] = 0;
         const k = s.poolNext;
         s.poolNext = (s.poolNext + 1) % MAX_POOLS;
         s.pools = Math.min(MAX_POOLS, s.pools + 1);
         const r = s.size[i] * (3 + rnd() * 4);
-        tmp.position.set(s.pos[i].x + (rnd() - 0.5) * 0.02, 0.002 + k * 1e-6, s.pos[i].z + (rnd() - 0.5) * 0.02);
+        const px = s.pos[i].x + (rnd() - 0.5) * 0.02;
+        const pz = s.pos[i].z + (rnd() - 0.5) * 0.02;
+        tmp.position.set(px, groundAt(px, pz) + 0.002 + k * 1e-6, pz);
         tmp.rotation.set(0, rnd() * Math.PI, 0);
         tmp.scale.set(r * (0.7 + rnd() * 0.6), 1, r);
         tmp.updateMatrix();

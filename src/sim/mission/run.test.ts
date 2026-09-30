@@ -2,12 +2,13 @@ import { describe, expect, it } from "vitest";
 import { vehicleById } from "../vehicles/library";
 import { runExperiment, type Scenario } from "./run";
 
-const surface: Scenario = { elevationM: 0, windMs: 0.5, start: { kind: "surface" }, activity: "walking" };
+const surface: Scenario = { elevationM: 0, ground: "flat", windMs: 0.5, start: { kind: "surface" }, activity: "walking" };
 
 describe("Venera 13 validation", () => {
   const venera = vehicleById("venera13")!;
   const r = runExperiment(venera, {
     elevationM: 1500,
+    ground: "venera13",
     windMs: 0.5,
     start: { kind: "descent", fromKm: 62 },
     activity: "idle",

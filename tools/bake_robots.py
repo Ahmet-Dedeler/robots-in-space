@@ -23,6 +23,7 @@ import re
 import shutil
 import subprocess
 import sys
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import mujoco
@@ -61,6 +62,161 @@ def decimate(src: Path, dst: Path) -> None:
     if len(mesh.faces) > TARGET_FACES:
         mesh = mesh.simplify_quadric_decimation(face_count=TARGET_FACES)
     dst.write_bytes(mesh.export(file_type="stl"))
+
+
+# ---- Plastic yield hinges ------------------------------------------------------------
+#
+# Rigid bodies can't bend, so each thigh and shin is cut in half and the halves
+# are joined by two passive hinges (pitch + roll) with a stiff spring (the
+# limb's elastic bending stiffness). At runtime the spring rest angle is moved
+# whenever the bending moment exceeds the section's plastic moment
+# M_p(T) = M_p0 * yield(T)/yield(20 C) (return mapping), so the limb is
+# elastic below yield and bends *permanently* above it:
+# elastic-perfectly-plastic behaviour. MuJoCo's frictionloss was tried first
+# but creeps under sustained load. See src/sim/robots/robot-world.ts.
+
+def _quat_to_mat(q):
+    w, x, y, z = q
+    return np.array([
+        [1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
+        [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
+        [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)],
+    ])
+
+
+def _vec(el, attr, default):
+    v = el.get(attr)
+    return np.array([float(t) for t in v.split()]) if v else np.array(default, dtype=float)
+
+
+def _fmt(v):
+    return " ".join(f"{x:.6g}" for x in v)
+
+
+def add_yield_hinges(out: Path) -> list[dict]:
+    """Split thigh and shin bodies in robot.xml; returns hinge metadata."""
+    tree = ET.parse(out / "robot.xml")
+    root = tree.getroot()
+    asset = root.find("asset")
+    parent_of = {c: p for p in root.iter() for c in p}
+    bodies = {b.get("name"): b for b in root.iter("body")}
+    hinges = []
+
+    for side in ("left", "right"):
+        knee = bodies[f"{side}_knee_link"]
+        thigh = parent_of[knee]
+        for link in (thigh, knee):
+            child = next(c for c in link if c.tag == "body")
+            v = _vec(child, "pos", [0, 0, 0])
+            L = np.linalg.norm(v)
+            n = v / L
+            cut = v * 0.5
+            name = link.get("name")
+
+            # Meshes of this link, in the link frame, split at the cut plane.
+            parts = {"upper": [], "lower": []}
+            vol = {"upper": 0.0, "lower": 0.0}
+            cen = {"upper": np.zeros(3), "lower": np.zeros(3)}
+            for g in [c for c in link if c.tag == "geom"]:
+                if g.get("type") != "mesh":
+                    side_key = "upper" if np.dot(_vec(g, "pos", [0, 0, 0]) - cut, n) < 0 else "lower"
+                    parts[side_key].append(("prim", g))
+                    continue
+                mname = g.get("mesh")
+                mfile = next(m.get("file") for m in asset.iter("mesh") if m.get("name") == mname)
+                mesh = trimesh.load_mesh(out / "meshes" / mfile)
+                T = np.eye(4)
+                T[:3, :3] = _quat_to_mat(_vec(g, "quat", [1, 0, 0, 0]))
+                T[:3, 3] = _vec(g, "pos", [0, 0, 0])
+                mesh.apply_transform(T)
+                for key, normal, origin in (("upper", -n, cut), ("lower", n, cut)):
+                    piece = mesh.slice_plane(origin, normal, cap=True)
+                    if piece is None or len(piece.faces) == 0:
+                        continue
+                    if key == "lower":
+                        piece.apply_translation(-cut)
+                    new_name = f"{mname}_{key}"
+                    new_file = f"{Path(mfile).stem}_{key}.STL"
+                    (out / "meshes" / new_file).write_bytes(piece.export(file_type="stl"))
+                    if not any(m.get("name") == new_name for m in asset.iter("mesh")):
+                        ET.SubElement(asset, "mesh", {"name": new_name, "file": new_file})
+                    parts[key].append(("mesh", g, new_name))
+                    if g.get("group") == "1":  # visual copy: use it to split mass
+                        vol[key] += abs(piece.volume) if piece.is_volume else piece.area * 0.002
+                        c = piece.center_mass if piece.is_volume else piece.centroid
+                        cen[key] = c + (cut if key == "lower" else 0)
+
+            total_v = vol["upper"] + vol["lower"]
+            fu = vol["upper"] / total_v if total_v > 0 else 0.5
+            fl = 1 - fu
+
+            # Build the lower body.
+            lower = ET.Element("body", {"name": f"{name}_lower", "pos": _fmt(cut)})
+            inertial = link.find("inertial")
+            m = float(inertial.get("mass"))
+            com = _vec(inertial, "pos", [0, 0, 0])
+            diag = _vec(inertial, "diaginertia", [1e-4] * 3)
+            # Preserve the original COM exactly: shift mesh centroids by a common offset.
+            delta = com - (fu * cen["upper"] + fl * cen["lower"])
+            cu, cl = cen["upper"] + delta, cen["lower"] + delta
+            inertial.set("mass", f"{m * fu:.6g}")
+            inertial.set("pos", _fmt(cu))
+            inertial.set("diaginertia", _fmt(np.maximum(diag * fu, 1e-6)))
+            ET.SubElement(lower, "inertial", {
+                "pos": _fmt(cl - cut),
+                "quat": inertial.get("quat", "1 0 0 0"),
+                "mass": f"{m * fl:.6g}",
+                "diaginertia": _fmt(np.maximum(diag * fl, 1e-6)),
+            })
+            for axis, tag in (("0 1 0", "pitch"), ("1 0 0", "roll")):
+                ET.SubElement(lower, "joint", {
+                    "name": f"{name}_yield_{tag}",
+                    "type": "hinge",
+                    "axis": axis,
+                    "range": "-1.3 1.3",
+                    # ~ 4EI/L for an aluminium limb tube (D 5 cm, 3 mm wall, L 0.4 m) is ~8e4;
+                    # 2e4 keeps the explicit spring stable at dt = 2 ms (deflection ~0.3 deg at 100 N m).
+                    "stiffness": "20000",
+                    "damping": "40",
+                    # Extra rotor inertia keeps the stiff spring stable; small next to the limb's own.
+                    "armature": "0.1",
+                    "actuatorfrclimited": "false",
+                })
+
+            # Replace link geoms by the upper halves, give the lower halves to the new body.
+            for g in [c for c in link if c.tag == "geom"]:
+                link.remove(g)
+            for entry in parts["upper"]:
+                if entry[0] == "prim":
+                    link.append(entry[1])
+                else:
+                    g, new_name = entry[1], entry[2]
+                    ng = ET.SubElement(link, "geom", {k: v for k, v in g.attrib.items() if k not in ("pos", "quat")})
+                    ng.set("mesh", new_name)
+            for entry in parts["lower"]:
+                if entry[0] == "prim":
+                    g = entry[1]
+                    g.set("pos", _fmt(_vec(g, "pos", [0, 0, 0]) - cut))
+                    lower.append(g)
+                else:
+                    g, new_name = entry[1], entry[2]
+                    ng = ET.SubElement(lower, "geom", {k: v for k, v in g.attrib.items() if k not in ("pos", "quat")})
+                    ng.set("mesh", new_name)
+            # Move the next body under the lower half.
+            link.remove(child)
+            child.set("pos", _fmt(v - cut))
+            lower.append(child)
+            link.append(lower)
+            hinges.append({
+                "name": name,
+                "joints": [f"{name}_yield_pitch", f"{name}_yield_roll"],
+                "lengthM": float(L),
+                "massSplit": [round(fu, 3), round(fl, 3)],
+            })
+
+    ET.indent(tree)
+    tree.write(out / "robot.xml")
+    return hinges
 
 
 def export_policy(pt: Path) -> dict:
@@ -117,8 +273,11 @@ def rollout(xml: Path, cfg: dict, pt: Path, *, g: float, rho: float, mu: float, 
     target = default.copy()
     obs = np.zeros(no, np.float32)
     frames = []
+    jid = m.actuator_trnid[:, 0]
+    qi = m.jnt_qposadr[jid]
+    vi = m.jnt_dofadr[jid]
     for k in range(int(seconds / m.opt.timestep)):
-        d.ctrl[:] = (target - d.qpos[7:]) * kps - d.qvel[6:] * kds
+        d.ctrl[:] = (target - d.qpos[qi]) * kps - d.qvel[vi] * kds
         mujoco.mj_step(m, d)
         if (k + 1) % cfg["control_decimation"] == 0:
             t = (k + 1) * m.opt.timestep
@@ -126,8 +285,8 @@ def rollout(xml: Path, cfg: dict, pt: Path, *, g: float, rho: float, mu: float, 
             obs[:3] = d.qvel[3:6] * cfg["ang_vel_scale"]
             obs[3:6] = gravity_orientation(d.qpos[3:7])
             obs[6:9] = cmd * np.array(cfg["cmd_scale"])
-            obs[9 : 9 + na] = (d.qpos[7:] - default) * cfg["dof_pos_scale"]
-            obs[9 + na : 9 + 2 * na] = d.qvel[6:] * cfg["dof_vel_scale"]
+            obs[9 : 9 + na] = (d.qpos[qi] - default) * cfg["dof_pos_scale"]
+            obs[9 + na : 9 + 2 * na] = d.qvel[vi] * cfg["dof_vel_scale"]
             obs[9 + 2 * na : 9 + 3 * na] = action
             obs[9 + 3 * na : 9 + 3 * na + 2] = [np.sin(2 * np.pi * phase), np.cos(2 * np.pi * phase)]
             with torch.no_grad():
@@ -135,7 +294,9 @@ def rollout(xml: Path, cfg: dict, pt: Path, *, g: float, rho: float, mu: float, 
             target = action * cfg["action_scale"] + default
             if len(frames) < record:
                 frames.append({"obs": obs.tolist(), "action": action.tolist()})
-    return {"x": float(d.qpos[0]), "z": float(d.qpos[2])}, frames
+    yield_dofs = [m.jnt_dofadr[j] for j in range(m.njnt) if "_yield_" in (m.joint(j).name or "")]
+    bend = float(np.max(np.abs(d.qpos[[m.jnt_qposadr[j] for j in range(m.njnt) if "_yield_" in (m.joint(j).name or "")]]))) if yield_dofs else 0.0
+    return {"x": float(d.qpos[0]), "z": float(d.qpos[2]), "maxBendRad": bend}, frames
 
 
 def main() -> None:
@@ -161,6 +322,7 @@ def main() -> None:
         for f in mesh_files:
             decimate(xml_src.parent / "meshes" / f, out / "meshes" / f)
 
+        hinges = add_yield_hinges(out)
         policy = export_policy(pt)
         policy["config"] = {
             k: cfg[k]
@@ -180,7 +342,8 @@ def main() -> None:
                 "cmd_init",
             ]
         }
-        policy["meshes"] = mesh_files
+        policy["meshes"] = sorted({p.name for p in (out / "meshes").iterdir()})
+        policy["yieldHinges"] = hinges
         (out / "policy.json").write_text(json.dumps(policy, separators=(",", ":")))
 
         size = sum(p.stat().st_size for p in out.rglob("*") if p.is_file()) / 1e6
@@ -189,7 +352,7 @@ def main() -> None:
         # Sanity: the decimated model must still walk, on Earth and on Venus.
         for label, g, rho, mu in [("earth", 9.81, 0.0, 0.0), ("venus", 8.87, 65.0, 3.3e-5)]:
             res, _ = rollout(out / "robot.xml", cfg, pt, g=g, rho=rho, mu=mu, seconds=10)
-            print(f"  {label}: walked x={res['x']:.2f} m, pelvis z={res['z']:.2f} m")
+            print(f"  {label}: walked x={res['x']:.2f} m, pelvis z={res['z']:.2f} m, max yield-hinge bend {res['maxBendRad']:.4f} rad")
 
         # Reference frames for the TS policy test (Earth, no fluid).
         _, frames = rollout(out / "robot.xml", cfg, pt, g=9.81, rho=0, mu=0, seconds=0.2, record=8)

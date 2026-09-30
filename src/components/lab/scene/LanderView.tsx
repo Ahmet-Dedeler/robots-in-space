@@ -11,6 +11,7 @@ import * as THREE from "three";
 import { useLab } from "@/lib/lab-store";
 import { stateAt } from "@/sim/mission/run";
 import { incandescence } from "./damage";
+import { useTerrain } from "./useScene";
 
 /** A thin rod between two points. */
 function Strut({ from, to, radius = 0.03, color = "#77706a" }: { from: THREE.Vector3; to: THREE.Vector3; radius?: number; color?: string }) {
@@ -155,6 +156,22 @@ export function LanderView({ shape }: { shape: "lander" | "box" }) {
   const streaks = useRef<THREE.Group>(null);
   const controls = useThree((s) => s.controls) as unknown as { target: THREE.Vector3; update: () => void } | null;
   const camera = useThree((s) => s.camera);
+  const terrain = useTerrain();
+  // Settle on the ground: fit a plane under the 1 m landing ring (tilts on slopes, like Venera 9 did)
+  // and rest on the highest rock it touches.
+  const { groundY, tilt } = (() => {
+    const ring = Array.from({ length: 16 }, (_, k) => {
+      const a = (k / 16) * Math.PI * 2;
+      return { x: Math.cos(a), y: Math.sin(a), h: terrain.height(Math.cos(a), Math.sin(a)) };
+    });
+    const mean = ring.reduce((m, p) => m + p.h, 0) / ring.length;
+    const sx = ring.reduce((m, p) => m + p.x * (p.h - mean), 0) / ring.reduce((m, p) => m + p.x * p.x, 0);
+    const sy = ring.reduce((m, p) => m + p.y * (p.h - mean), 0) / ring.reduce((m, p) => m + p.y * p.y, 0);
+    const lift = Math.max(...ring.map((p) => p.h - (mean + sx * p.x + sy * p.y)));
+    // MuJoCo (x, y) -> three (x, -z): the ground normal in three coordinates.
+    const n = new THREE.Vector3(-sx, 1, sy).normalize();
+    return { groundY: mean + lift, tilt: new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), n) };
+  })();
 
   useFrame(() => {
     const { playback, result, config } = useLab.getState();
@@ -162,10 +179,11 @@ export function LanderView({ shape }: { shape: "lander" | "box" }) {
     const above = st.altitudeM - config.scenario.elevationM;
     descending.current = above > 0.5;
     speed.current = st.speedMs;
-    const y = Math.min(above, 40);
+    const y = Math.min(above, 40) + groundY;
     if (group.current) {
       group.current.position.y = y;
-      group.current.rotation.z = descending.current ? Math.sin(playback.t * 0.7) * 0.03 : 0;
+      if (descending.current) group.current.quaternion.setFromEuler(new THREE.Euler(0, 0, Math.sin(playback.t * 0.7) * 0.03));
+      else group.current.quaternion.copy(tilt);
     }
     const stages = result.build.descent?.stages ?? [];
     const km = st.altitudeM / 1000;

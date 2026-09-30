@@ -19,8 +19,11 @@ import * as THREE from "three";
 import { useLab } from "@/lib/lab-store";
 import { atmosphere } from "@/sim/env/atmosphere";
 import { stateAt } from "@/sim/mission/run";
-import { WalkController } from "@/sim/robots/policy";
-import { createRobotSim, type RobotSim } from "../mujoco";
+import type { MjModel } from "@mujoco/mujoco";
+import { RobotWorld, type FileProvider } from "@/sim/robots/robot-world";
+import { displacedVolumeM3 } from "@/sim/vehicles/volume";
+import { loadMujoco } from "../mujoco";
+import { useTerrain } from "./useScene";
 import {
   applyShellDamage,
   createDamageMaterial,
@@ -48,8 +51,7 @@ interface RigMesh {
   verts: number;
 }
 
-function buildMeshes(sim: RobotSim, finish: Finish, uniforms: DamageUniforms): { group: THREE.Group; meshes: RigMesh[] } {
-  const { model } = sim;
+function buildMeshes(model: MjModel, finish: Finish, uniforms: DamageUniforms): { group: THREE.Group; meshes: RigMesh[] } {
   const group = new THREE.Group();
   const meshes: RigMesh[] = [];
   const vert = model.mesh_vert as Float32Array;
@@ -101,14 +103,15 @@ function buildMeshes(sim: RobotSim, finish: Finish, uniforms: DamageUniforms): {
   return { group, meshes };
 }
 
+const browserFiles: FileProvider = {
+  text: (p) => fetch(`/${p}`).then((r) => r.text()),
+  bytes: async (p) => new Uint8Array((await fetch(`/${p}`).then((r) => r.arrayBuffer())) as ArrayBuffer),
+};
+
 /** Everything the frame loop mutates lives here, outside React state. */
 interface Runtime {
-  sim: RobotSim;
+  world: RobotWorld;
   meshes: RigMesh[];
-  controller: WalkController;
-  tau: Float64Array;
-  frcLimit: Float64Array;
-  acc: number;
   wasAlive: boolean;
   lastReset: number;
   dripAcc: number;
@@ -116,6 +119,10 @@ interface Runtime {
   ventAcc: number;
   wasMelting: boolean;
 }
+
+/** Walk a ~5 m circle (0.5 m/s, 0.1 rad/s) so the robot stays on the detailed terrain patch. */
+const WALK: [number, number, number] = [0.5, 0, 0.1];
+const STAND: [number, number, number] = [0, 0, 0];
 
 export function HumanoidView({
   robot,
@@ -128,7 +135,10 @@ export function HumanoidView({
 }) {
   const elevationM = useLab((s) => s.config.scenario.elevationM);
   const windMs = useLab((s) => s.config.scenario.windMs);
-  const activity = useLab((s) => s.config.scenario.activity);
+  const massKg = useLab((s) => s.config.build.massKg);
+  const volume = useLab((s) => displacedVolumeM3(s.config.build));
+  const loadFraction = useLab((s) => s.config.build.frame.loadFraction);
+  const terrain = useTerrain();
   const [group, setGroup] = useState<THREE.Group | null>(null);
   const runtime = useRef<Runtime | null>(null);
   const followTarget = useRef(new THREE.Vector3(0, 0.8, 0));
@@ -139,23 +149,32 @@ export function HumanoidView({
   const camera = useThree((s) => s.camera);
   const controls = useThree((s) => s.controls) as unknown as { target: THREE.Vector3; update: () => void } | null;
 
-  // (Re)build the MuJoCo world when the robot or the medium changes.
+  // (Re)build the MuJoCo world when the robot, the medium or the ground changes.
   useEffect(() => {
     let cancelled = false;
     const atm = atmosphere(elevationM);
-    createRobotSim(robot, { gravity: atm.gravity, density: atm.densityKgM3, viscosity: atm.gas.mu, windMs })
-      .then((sim) => {
-        if (cancelled) return sim.dispose();
-        const rig = buildMeshes(sim, finish, uniforms);
-        const trn = sim.model.actuator_trnid as Int32Array;
-        const range = sim.model.jnt_actfrcrange as Float64Array;
+    loadMujoco()
+      .then((mj) =>
+        RobotWorld.create(mj, browserFiles, {
+          robot,
+          gravity: atm.gravity,
+          gasDensity: atm.densityKgM3,
+          gasViscosity: atm.gas.mu,
+          windMs,
+          massKg,
+          displacedVolumeM3: volume,
+          terrain,
+          frameLoadFraction: loadFraction,
+          terrainHalf: 7,
+          terrainRes: 0.025,
+        }),
+      )
+      .then((world) => {
+        if (cancelled) return world.dispose();
+        const rig = buildMeshes(world.model, finish, uniforms);
         runtime.current = {
-          sim,
+          world,
           meshes: rig.meshes,
-          controller: new WalkController(sim.policy),
-          tau: new Float64Array(sim.model.nu),
-          frcLimit: Float64Array.from({ length: sim.model.nu }, (_, i) => range[trn[i * 2] * 2 + 1] || 1e9),
-          acc: 0,
           wasAlive: true,
           lastReset: useLab.getState().playback.resetToken,
           dripAcc: 0,
@@ -169,62 +188,42 @@ export function HumanoidView({
       .catch((e: unknown) => onReady?.(false, e instanceof Error ? e.message : String(e)));
     return () => {
       cancelled = true;
-      runtime.current?.sim.dispose();
+      runtime.current?.world.dispose();
       runtime.current = null;
       setGroup(null);
     };
-  }, [robot, finish, elevationM, windMs, onReady, uniforms]);
-
-  // Walking or standing still: same policy, zero velocity command.
-  useEffect(() => {
-    const cmd: [number, number, number] = activity === "walking" ? [0.5, 0, 0] : [0, 0, 0];
-    if (runtime.current) runtime.current.controller.command = cmd;
-  }, [activity, group]);
+  }, [robot, finish, elevationM, windMs, massKg, volume, loadFraction, terrain, onReady, uniforms]);
 
   useFrame((_, delta) => {
     const rt = runtime.current;
     if (!rt) return;
-    const { sim, controller, tau, frcLimit } = rt;
-    const { playback, result } = useLab.getState();
+    const { world } = rt;
+    const { playback, result, config } = useLab.getState();
     const st = stateAt(result, playback.t);
 
     // Reset on restart, or when scrubbing back from dead to alive.
     const alive = st.controller && st.power;
     if (rt.lastReset !== playback.resetToken || (alive && !rt.wasAlive)) {
       rt.lastReset = playback.resetToken;
-      sim.mj.mj_resetData(sim.model, sim.data);
-      sim.mj.mj_forward(sim.model, sim.data);
-      controller.reset();
+      world.reset();
       drips.current?.clear();
       plume.current?.clear();
     }
     rt.wasAlive = alive;
 
     if (playback.playing) {
-      // Thermal model -> actuators: available motor torque, capped by what the
-      // weakened frame can carry (yield strength vs its working stress); limp when dead.
-      const structural = Math.min(1, st.frameYieldFraction / result.build.frame.loadFraction);
-      const scale = alive ? st.torqueFraction * structural : 0;
-      const dt = sim.model.opt.timestep;
-      rt.acc = Math.min(rt.acc + delta, 0.1);
-      const qpos = sim.data.qpos as Float64Array;
-      const qvel = sim.data.qvel as Float64Array;
-      const ctrl = sim.data.ctrl as Float64Array;
-      while (rt.acc >= dt) {
-        controller.torques(qpos, qvel, tau);
-        for (let j = 0; j < tau.length; j++) {
-          const lim = frcLimit[j] * scale;
-          ctrl[j] = Math.max(-lim, Math.min(lim, tau[j] * scale));
-        }
-        sim.mj.mj_step(sim.model, sim.data);
-        controller.afterStep(qpos, qvel);
-        rt.acc -= dt;
-      }
+      // Thermal model -> mechanics: available motor torque (limp when dead) and the
+      // frame's hot yield strength, which sets the limbs' plastic moment.
+      world.advance(delta, {
+        torqueScale: alive ? st.torqueFraction : 0,
+        plasticScale: st.frameYieldFraction,
+        command: config.scenario.activity === "walking" ? WALK : STAND,
+      });
     }
 
     // Copy MuJoCo poses (Z-up) into the three.js meshes; parent group rotates to Y-up.
-    const xpos = sim.data.geom_xpos as Float64Array;
-    const xmat = sim.data.geom_xmat as Float64Array;
+    const xpos = world.data.geom_xpos as Float64Array;
+    const xmat = world.data.geom_xmat as Float64Array;
     const m = tmp.current;
     for (const { geom: g, obj } of rt.meshes) {
       const p = g * 3;
@@ -248,12 +247,9 @@ export function HumanoidView({
     uniforms.uGlow.value.copy(incandescence(batteryK));
     // Battery pack sits ~25 cm up the torso axis from the pelvis origin (MuJoCo z-up -> three y-up).
     {
-      const xp = sim.data.xpos as Float64Array;
-      const xm = sim.data.xmat as Float64Array;
-      const bx = xp[3] + 0.25 * xm[9 + 2];
-      const by = xp[4] + 0.25 * xm[9 + 5];
-      const bz = xp[5] + 0.25 * xm[9 + 8];
-      uniforms.uGlowCenter.value.set(bx, bz, -by);
+      const xp = world.data.xpos as Float64Array;
+      const xm = world.data.xmat as Float64Array;
+      uniforms.uGlowCenter.value.set(xp[3] + 0.25 * xm[9 + 2], xp[5] + 0.25 * xm[9 + 8], -(xp[4] + 0.25 * xm[9 + 5]));
     }
 
     // Scrubbed back before the covers melted: remove puddles and fumes.
@@ -266,12 +262,10 @@ export function HumanoidView({
 
     if (playback.playing) {
       const sample = () => {
-        const m = rt.meshes[Math.floor(Math.random() * rt.meshes.length)];
-        const pos = m.obj.geometry.attributes.position as THREE.BufferAttribute;
-        const v = new THREE.Vector3().fromBufferAttribute(pos, Math.floor(Math.random() * m.verts));
-        return v.applyMatrix4(m.obj.matrixWorld);
+        const mesh = rt.meshes[Math.floor(Math.random() * rt.meshes.length)];
+        const pos = mesh.obj.geometry.attributes.position as THREE.BufferAttribute;
+        return new THREE.Vector3().fromBufferAttribute(pos, Math.floor(Math.random() * mesh.verts)).applyMatrix4(mesh.obj.matrixWorld);
       };
-      // Molten covers drip (rates are visual, but only while the model says it is molten).
       rt.dripAcc += dmg.drip * 45 * delta;
       const newDrips: THREE.Vector3[] = [];
       while (rt.dripAcc >= 1) {
@@ -279,7 +273,6 @@ export function HumanoidView({
         rt.dripAcc -= 1;
       }
       if (newDrips.length) drips.current?.spawn(newDrips);
-      // Pyrolysis fumes off the covers.
       rt.fumeAcc += dmg.fume * 30 * delta;
       while (rt.fumeAcc >= 1) {
         plume.current?.emit(sample(), { color: new THREE.Color(0.42, 0.36, 0.3), size: 0.07, rise: 0.22, spread: 0.02, life: 3.5 });
@@ -293,22 +286,16 @@ export function HumanoidView({
         const torso = uniforms.uGlowCenter.value.clone();
         const hot = Math.min(1, excess / 500);
         while (rt.ventAcc >= 1) {
-          plume.current?.emit(torso, {
-            color: new THREE.Color(0.1 + 0.25 * hot, 0.09 + 0.1 * hot, 0.08),
-            size: 0.14,
-            rise: 0.6,
-            spread: 0.12,
-            life: 5,
-          });
+          plume.current?.emit(torso, { color: new THREE.Color(0.1 + 0.25 * hot, 0.09 + 0.1 * hot, 0.08), size: 0.14, rise: 0.6, spread: 0.12, life: 5 });
           rt.ventAcc -= 1;
         }
       }
     }
 
     // Camera follows the pelvis (MuJoCo x,y,z -> three x,z,-y).
-    const qp = sim.data.qpos as Float64Array;
+    const qp = world.data.qpos as Float64Array;
     const target = followTarget.current;
-    target.lerp(new THREE.Vector3(qp[0], Math.max(0.4, qp[2] * 0.8), -qp[1]), 0.08);
+    target.lerp(new THREE.Vector3(qp[0], qp[2] * 0.8 + 0.1, -qp[1]), 0.08);
     if (controls) {
       const shift = target.clone().sub(controls.target);
       controls.target.add(shift);
@@ -320,7 +307,7 @@ export function HumanoidView({
   return (
     <>
       {group && <primitive object={group} rotation-x={-Math.PI / 2} />}
-      <MeltDrips ref={drips} />
+      <MeltDrips ref={drips} groundAt={(x, z) => terrain.height(x, -z)} />
       <Plume ref={plume} />
     </>
   );

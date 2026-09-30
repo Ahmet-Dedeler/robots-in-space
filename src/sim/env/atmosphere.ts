@@ -123,12 +123,18 @@ export function atmosphere(altitudeM: number): AtmosphereSample {
   };
 }
 
-/** Named surface sites. Elevations relative to mean planetary radius. */
+/**
+ * Named surface sites. Elevations relative to mean planetary radius
+ * (6051.8 km); lander-site elevations are approximate. Ground types come from
+ * the nearest Venera panorama that looks like the site.
+ */
 export const SITES = [
-  { id: "plains", name: "Mean plains", elevationM: 0, note: "Most of Venus looks like this: basalt plains, 464 °C." },
-  { id: "venera13", name: "Venera 13 site (Phoebe Regio)", elevationM: 1_500, note: "7.5°S 303°E, where Venera 13 lasted 127 minutes. Elevation approximate." },
-  { id: "lowland", name: "Atalanta Planitia lowland", elevationM: -1_400, note: "One of the deepest lowlands: hottest, densest air." },
-  { id: "maxwell", name: "Maxwell Montes summit", elevationM: 10_800, note: "Highest point on Venus: ~380 °C, ~45 bar." },
+  { id: "plains", name: "Mean plains", elevationM: 0, ground: "venera14", note: "Most of Venus: volcanic plains, 462 °C, 92 bar. Ground like Venera 14's bedrock plates." },
+  { id: "venera13", name: "Venera 13 site (Phoebe Regio)", elevationM: 1_500, ground: "venera13", note: "7.5°S 303°E, where Venera 13 lasted 127 minutes. Plates in loose soil. Elevation approx." },
+  { id: "venera14", name: "Venera 14 site", elevationM: 0, ground: "venera14", note: "13.3°S 310°E, ~1,000 km from Venera 13. Bare layered plates, little soil. Elevation approx." },
+  { id: "venera9", name: "Venera 9 site (Beta Regio flank)", elevationM: 2_000, ground: "venera9", note: "31°N 291.6°E. Landed on a 15-20° slope of angular boulders. Elevation approx." },
+  { id: "lowland", name: "Atalanta Planitia lowland", elevationM: -1_400, ground: "venera14", note: "One of the deepest lowlands: hottest, densest air." },
+  { id: "maxwell", name: "Maxwell Montes summit", elevationM: 10_800, ground: "venera9", note: "Highest point on Venus: ~380 °C, ~45 bar. No lander has been there; rocky ground assumed." },
 ] as const;
 
 export type SiteId = (typeof SITES)[number]["id"];
