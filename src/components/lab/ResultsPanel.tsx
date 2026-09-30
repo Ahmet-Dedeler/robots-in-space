@@ -193,7 +193,7 @@ export function ResultsPanel() {
           <p className="text-[11px] text-stone-500">Click a chart to jump the playback there. Red dashed line: time of death.</p>
         </TabsContent>
         <TabsContent value="sweep" className="p-4">
-          <Sweep />
+          <Sweep key={result.build.id} />
         </TabsContent>
         <TabsContent value="notes" className="p-4">
           <Notes />
