@@ -36,7 +36,11 @@ export function compactArea(massKg: number, density: number, shape = 2): number 
 
 const cpOf = (id: MaterialId) => MATERIALS[id].cp;
 
-export function buildThermalModel(b: VehicleBuild, batteryWhPerKg: number): ThermalModel {
+/**
+ * @param insulationK conductivity of the insulation in this environment
+ *   (porous insulation is far better in vacuum than in 92-bar CO2).
+ */
+export function buildThermalModel(b: VehicleBuild, batteryWhPerKg: number, insulationK?: (m: MaterialId, venusK: number) => number): ThermalModel {
   const nodes: ThermalNode[] = [];
   const links: ThermalLink[] = [];
   const role: Partial<Record<Role, number>> = {};
@@ -52,8 +56,10 @@ export function buildThermalModel(b: VehicleBuild, batteryWhPerKg: number): Ther
   };
 
   const ins = MATERIALS[b.insulation.material];
+  const insK = insulationK ? insulationK(b.insulation.material, ins.k) : ins.k;
   const insT = b.insulation.thicknessMm / 1000;
-  const sealed = b.enclosure.kind === "sealed";
+  // Sealed pressure hulls and unpressurized warm boxes both keep the parts off the outside world.
+  const sealed = b.enclosure.kind !== "open";
   const cavity = b.enclosure.kind === "open" ? b.enclosure.internalExposure : 0.35;
 
   // Outer skin / aeroshell.
@@ -78,38 +84,42 @@ export function buildThermalModel(b: VehicleBuild, batteryWhPerKg: number): Ther
   // Pressure hull (sealed only).
   let hull: number | undefined;
   let hullMassKg = 0;
-  if (b.enclosure.kind === "sealed") {
-    const h = b.enclosure.hull;
-    const hm = MATERIALS[h.material];
-    const area = 4 * Math.PI * h.radiusM ** 2;
-    hullMassKg = area * (h.thicknessMm / 1000) * hm.density;
-    hull = add("hull", { label: `Pressure hull (${hm.name})`, C: hullMassKg * hm.cp });
-    const gIns = insT > 0 ? (ins.k * area) / insT : 2000 * area;
+  if (b.enclosure.kind !== "open") {
+    const e = b.enclosure;
+    const hm = MATERIALS[e.kind === "sealed" ? e.hull.material : e.wall.material];
+    const area = e.kind === "sealed" ? 4 * Math.PI * e.hull.radiusM ** 2 : e.wall.areaM2;
+    hullMassKg = area * ((e.kind === "sealed" ? e.hull.thicknessMm : e.wall.thicknessMm) / 1000) * hm.density;
+    hull = add("hull", { label: e.kind === "sealed" ? `Pressure hull (${hm.name})` : `Warm electronics box (${hm.name})`, C: hullMassKg * hm.cp });
+    const gIns = insT > 0 ? (insK * area) / insT : 2000 * area;
     link(skin, hull, gIns);
     // Structural attachments (struts/brackets through the insulation). Ti struts:
     // k*A/L ~ 6.7 W/m/K * 10 x 7e-4 m^2 / 0.5 m ~ 0.1 W/K; allow for bolts and cabling.
-    link(frame, hull, 0.3);
+    // Rover warm boxes hang on low-conductance flexures (titanium/G-10) and
+    // budget ~0.05 W/K for mounts and harness (MER: Novak et al. 2005). Approximate.
+    link(frame, hull, e.kind === "box" ? 0.05 : 0.3);
   }
 
   /** Internal part: sealed -> couples to hull; open -> flooded, behind its jacket. */
   const internal = (r: Role, label: string, massKg: number, cp: number, density: number, jacketed: boolean) => {
     const area = compactArea(massKg, density);
-    const seriesR = jacketed && insT > 0 ? insT / (ins.k * area) : 0;
+    const seriesR = jacketed && insT > 0 ? insT / (insK * area) : 0;
     const exposure: Exposure = { area, emissivity: 0.8, lengthM: 0.1, convFactor: cavity, seriesR };
     const i = add(r, { label, C: massKg * cp, exposure: sealed ? undefined : exposure });
-    if (b.enclosure.kind === "sealed") {
+    if (b.enclosure.kind !== "open") {
       link(i, hull, b.enclosure.internalH * area);
       breachExposure.set(i, { ...exposure, seriesR: 0 });
     }
     return i;
   };
 
+  // Equipment is bolted to the frame, except in a rover's warm box, where it sits on the insulated box floor.
+  const mount = b.enclosure.kind === "box" ? hull : frame;
   const electronics = internal("electronics", "Electronics bay", b.electronics.massKg, 900, 1500, true);
-  link(electronics, frame, 2);
+  link(electronics, mount, 2);
 
   const batteryMassKg = b.battery.capacityWh / batteryWhPerKg;
   const battery = internal("battery", "Battery pack", batteryMassKg, 1000, 2500, true);
-  link(battery, frame, 3);
+  link(battery, mount, 3);
 
   if (b.payloadMassKg > 0) {
     const payload = internal("payload", "Instruments & internal structure", b.payloadMassKg, 800, 1000, false);

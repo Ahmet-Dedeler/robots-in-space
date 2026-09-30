@@ -7,7 +7,7 @@
  * browser, a worker, or a Node test.
  */
 import { cToK, kToC } from "../constants";
-import { atmosphere, type AtmosphereSample } from "../env/atmosphere";
+import type { AtmosphereSample } from "../env/atmosphere";
 import { convection } from "../env/convection";
 import {
   BATTERIES,
@@ -23,6 +23,7 @@ import {
   type PartBase,
 } from "../materials/components";
 import { MATERIALS, curveAt, yieldFraction } from "../materials/materials";
+import { WORLD_CHANNELS, createWorld, type PlanetScenario, type WorldChannel } from "../planets/world";
 import { ThermalNetwork } from "../thermal/network";
 import walking from "../data/walking.json";
 import type { TerrainId } from "../terrain/terrain";
@@ -43,6 +44,8 @@ export interface Scenario {
   activity: Activity;
   /** Hard cap on simulated time [s]. */
   maxDurationS?: number;
+  /** Moon, Mars or Mercury. Absent = Venus. */
+  planet?: PlanetScenario;
 }
 
 export type Severity = "info" | "warn" | "fail" | "fatal";
@@ -70,6 +73,8 @@ export interface Series {
   controller: Uint8Array;
   power: Uint8Array;
   canWalk: Uint8Array;
+  /** Sun, solar array, ground temperature, local time, awake/hibernating (zeros on Venus). */
+  world: Record<WorldChannel, Float64Array>;
 }
 
 export interface Verdict {
@@ -109,15 +114,18 @@ interface Watch {
 export function runExperiment(build: VehicleBuild, scenario: Scenario): RunResult {
   const t0 = performance.now();
   const battery = BATTERIES[build.battery.part];
-  const model = buildThermalModel(build, battery.whPerKg);
+  const world = createWorld(build, scenario.elevationM, scenario.planet);
+  const model = buildThermalModel(build, battery.whPerKg, (m, k) => world.insulationK(m, k));
   const nodes = model.nodes.map((n) => ({ ...n, exposure: n.exposure ? { ...n.exposure } : undefined }));
+  const links = [...model.links];
   const R = model.role;
+  world.adapt(nodes, links, R);
 
   // Pyro-activated molten-salt batteries start hot.
   const initial = nodes.map((_, i) =>
     i === R.battery && battery.minOperatingK > build.initialTempK ? battery.minOperatingK + 100 : build.initialTempK,
   );
-  const net = new ThermalNetwork(nodes, model.links, initial);
+  const net = new ThermalNetwork(nodes, links, initial);
   const n = nodes.length;
 
   const events: SimEvent[] = [];
@@ -125,7 +133,7 @@ export function runExperiment(build: VehicleBuild, scenario: Scenario): RunResul
     events.push({ t, severity, title, detail, node });
 
   // ---- State ----------------------------------------------------------------
-  const descending = scenario.start.kind === "descent";
+  const descending = scenario.start.kind === "descent" && world.allowDescent;
   let altitude = descending ? (scenario.start as { fromKm: number }).fromKm * 1000 : scenario.elevationM;
   let landedS: number | null = descending ? null : 0;
   let touchdownMs: number | null = null;
@@ -146,9 +154,11 @@ export function runExperiment(build: VehicleBuild, scenario: Scenario): RunResul
   let walkStopS: number | null = null;
   let coolerOn = false;
   let controllerOkPrev = true;
+  let depletedWarned = false;
 
   const humanoid = build.mechanics.kind === "humanoid";
-  const wheeled = build.mechanics.kind === "wheeled";
+  // Planetary rovers drive like the skid steer, minus the MuJoCo model.
+  const wheeled = build.mechanics.kind === "wheeled" || build.mechanics.kind === "rover";
   const mobile = humanoid || wheeled;
   // Combustion engines need oxygen. Venus air is 96.5% CO2 + 3.5% N2 with only trace O2.
   const engineRuns = build.powerplant?.kind !== "diesel";
@@ -184,6 +194,13 @@ export function runExperiment(build: VehicleBuild, scenario: Scenario): RunResul
     }
     batteryWh = 0;
   });
+  world.setHooks({
+    electronicsDead: () => (electronicsOk = false),
+    batteryDead: () => {
+      batteryOk = false;
+      batteryWh = 0;
+    },
+  });
   if (build.motors) {
     watch(WINDINGS[build.motors.winding], R.motors, "Motor windings", () => (windingOk = false));
     watch(LUBRICANTS[build.motors.lubricant], R.motors, "Joint lubricant", () => (lubricantFactor = 0.6));
@@ -210,6 +227,10 @@ export function runExperiment(build: VehicleBuild, scenario: Scenario): RunResul
   function breach(reason: string) {
     if (breached) return;
     breached = true;
+    if (world.body.id !== "venus") {
+      emit(tNow, "warn", "Hull breached", `${reason}. The cabin gas leaks out; with no dense air outside, nothing floods in.`);
+      return;
+    }
     for (const [i, e] of model.breachExposure) nodes[i].exposure = { ...e };
     emit(tNow, "fatal", "Hull breached", `${reason}. Hot CO2 at ${(env.pressurePa / 1e5).toFixed(0)} bar floods the interior.`);
   }
@@ -230,16 +251,17 @@ export function runExperiment(build: VehicleBuild, scenario: Scenario): RunResul
       pwr ? 1 : 0,
       walk ? 1 : 0,
       ...net.T,
+      ...world.channels(),
     ]);
   };
 
   // ---- Main loop --------------------------------------------------------------
-  const maxT = scenario.maxDurationS ?? 60 * DAY;
+  const maxT = scenario.maxDurationS ?? world.maxDurationS;
   const h = new Float64Array(n);
   const Q = new Float64Array(n);
   let dt = 0.05;
   let t = 0;
-  let env = atmosphere(altitude);
+  let env = world.sample(altitude);
   let stopAt = maxT;
 
   const loads = () => {
@@ -252,7 +274,7 @@ export function runExperiment(build: VehicleBuild, scenario: Scenario): RunResul
 
   while (t < stopAt) {
     tNow = t;
-    env = atmosphere(altitude);
+    env = world.sample(altitude);
 
     // Descent: quasi-steady terminal velocity (drag relaxation takes seconds, the fall takes an hour).
     if (landedS === null && build.descent) {
@@ -272,28 +294,40 @@ export function runExperiment(build: VehicleBuild, scenario: Scenario): RunResul
 
     // Capabilities.
     const powerSource = batteryOk && batteryWh > 0 && net.T[R.battery ?? 0] >= battery.minOperatingK;
-    const power = powerSource || (build.rtg?.electricW ?? 0) > 0;
+    const solarW = world.solarW(net.T);
+    const power = powerSource || (build.rtg?.electricW ?? 0) > 0 || (solarW > 0 && solarW >= build.electronics.powerW);
     const controller = electronicsOk && solderOk && power;
+    // Hibernating is not dead: the controller is fine but switched off for the night.
+    const awake = controller && !world.asleep();
     if (magnet && R.motors !== undefined) magnetPeakK = Math.max(magnetPeakK, net.T[R.motors]);
     const magnetFrac = magnet && R.motors !== undefined ? magnetTorqueFraction(magnet, net.T[R.motors], magnetPeakK) : 1;
     const sizeFrac = build.motors && magnet ? Math.min(1, magnet.relativeTorque * build.motors.sizeFactor) : 1;
-    const torque = build.motors ? (windingOk ? magnetFrac * sizeFrac * lubricantFactor : 0) * (engineRuns ? 1 : 0) : 0;
+    const torque = build.motors ? (windingOk ? magnetFrac * sizeFrac * lubricantFactor * world.coldTorque(net.T) : 0) * (engineRuns ? 1 : 0) : 0;
     const frameYield = yieldFraction(frameMat, net.T[R.frame!]);
     const walking = mobile && scenario.activity === "walking" && landedS !== null;
     // Blind walking policies trip on rough ground even when healthy (MuJoCo calibration).
     const tripped = walking && gait !== null && !gait.walksAtFull && gait.meanTripS !== null && landedS !== null && t - landedS >= gait.meanTripS;
     const canWalk = humanoid
-      ? controller && frameOk && torque >= walkMin && !tripped
-      : wheeled && controller && engineRuns && frameOk && torque >= 0.3;
+      ? awake && frameOk && torque >= walkMin && !tripped
+      : wheeled && awake && engineRuns && frameOk && torque >= 0.3 && world.mobilityOk();
 
     if (controllerOkPrev && !controller && deathS === null) {
       deathS = t;
       const why = !power ? "no power" : !electronicsOk ? "electronics failed" : "solder joints opened";
-      emit(t, "fatal", "Controller dead", `Vehicle stops functioning (${why}).`);
+      const recoverable = world.canRecover && electronicsOk && solderOk;
+      if (recoverable && world.asleep())
+        emit(t, "warn", "Battery offline while asleep", "Battery too cold or empty to power the receiver and heaters. The array can restart the vehicle at sunrise if nothing freezes first.", "battery");
+      else
+        emit(t, recoverable ? "fail" : "fatal", recoverable ? "Power lost" : "Controller dead", `Vehicle stops functioning (${why}).${recoverable ? " It may come back when the Sun recharges it." : ""}`);
+      if (!recoverable) stopAt = Math.min(maxT, t + Math.max(300, 0.25 * t));
+    } else if (!controllerOkPrev && controller && deathS !== null) {
+      emit(t, "info", "Back online", "Sunlight on the array brought the vehicle back.");
+      deathS = null;
+    } else if (deathS !== null && !(electronicsOk && solderOk) && stopAt === maxT) {
       stopAt = Math.min(maxT, t + Math.max(300, 0.25 * t));
     }
     controllerOkPrev = controller;
-    if (mobile && walkStopS === null && !canWalk && landedS !== null) {
+    if (mobile && walkStopS === null && !canWalk && landedS !== null && !(controller && world.asleep())) {
       walkStopS = t;
       if (wheeled) {
         const why = !engineRuns ? "the diesel engine cannot run without oxygen" : !controller ? "controller dead" : !frameOk ? "frame yielded" : `drive torque down to ${(torque * 100).toFixed(0)}%`;
@@ -313,13 +347,13 @@ export function runExperiment(build: VehicleBuild, scenario: Scenario): RunResul
 
     // Heat loads.
     Q.fill(0);
-    if (controller && R.electronics !== undefined) Q[R.electronics] += build.electronics.powerW;
+    if (awake && R.electronics !== undefined) Q[R.electronics] += build.electronics.powerW;
     let motorW = 0;
     if (walking && canWalk && build.motors && R.motors !== undefined) {
       motorW = build.motors.electricW;
       Q[R.motors] += motorW * build.motors.heatFraction;
     }
-    const drawW = (controller ? loads() : 0) + motorW;
+    let drawW = (awake ? loads() : 0) + motorW;
     if (R.battery !== undefined && powerSource) Q[R.battery] += 0.03 * drawW;
     if (build.cooler && R.electronics !== undefined && controller) {
       const Tc = net.T[R.electronics];
@@ -334,13 +368,15 @@ export function runExperiment(build: VehicleBuild, scenario: Scenario): RunResul
       }
     }
     if (build.rtg && R.skin !== undefined) Q[R.skin] += build.rtg.thermalW;
+    // Sunlight, heater units, survival heaters (Moon/Mars/Mercury; nothing on Venus).
+    drawW += world.heat(Q, net.T, powerSource || solarW > 0);
 
     // Convection coefficients.
     const walkSpeed = walking && canWalk ? 0.5 : 0;
     const flow = landedS === null ? speed : Math.hypot(scenario.windMs, walkSpeed);
     for (let i = 0; i < n; i++) {
       const e = nodes[i].exposure;
-      h[i] = e
+      h[i] = e && !world.airless
         ? convection({
             surfaceK: net.T[i],
             ambientK: env.temperatureK,
@@ -360,10 +396,14 @@ export function runExperiment(build: VehicleBuild, scenario: Scenario): RunResul
     let maxDelta = 0;
     for (let i = 0; i < n; i++) maxDelta = Math.max(maxDelta, Math.abs(net.T[i] - before[i]));
 
-    // Battery energy (RTG covers load first).
-    const net_W = Math.max(0, drawW - (build.rtg?.electricW ?? 0));
-    if (powerSource) batteryWh = Math.max(0, batteryWh - (net_W * dt) / 3600);
-    if (powerSource && batteryWh === 0) emit(t + dt, "fatal", "Battery depleted", `Ran out of stored energy.`, "battery");
+    // Battery energy (RTG and solar cover load first; surplus charges at 90%).
+    const net_W = drawW - (build.rtg?.electricW ?? 0) - solarW;
+    if (net_W > 0 && powerSource) batteryWh = Math.max(0, batteryWh - (net_W * dt) / 3600);
+    else if (net_W < 0 && batteryOk && R.battery !== undefined && world.canCharge(net.T[R.battery]))
+      batteryWh = Math.min(build.battery.capacityWh, batteryWh - (0.9 * net_W * dt) / 3600);
+    if (batteryWh > 0.2 * build.battery.capacityWh) depletedWarned = false;
+    if (net_W > 0 && powerSource && batteryWh === 0 && !depletedWarned && (depletedWarned = true))
+      emit(t + dt, world.canRecover || (build.rtg?.electricW ?? 0) > 0 ? "warn" : "fatal", "Battery depleted", `Ran out of stored energy.`, "battery");
 
     // Descent position.
     if (landedS === null) {
@@ -379,6 +419,10 @@ export function runExperiment(build: VehicleBuild, scenario: Scenario): RunResul
 
     t += dt;
     tNow = t;
+    const mech = build.mechanics;
+    const groundSpeed = walking && canWalk ? (mech.kind === "rover" ? mech.speedMs * mech.dutyCycle : (gait?.metersPerS ?? 0.5)) : 0;
+    world.advance(dt, groundSpeed, controller, (sev, title, detail, node) => emit(t, sev, title, detail, node));
+    world.checkCold(net.T, (sev, title, detail, node) => emit(t, sev, title, detail, node));
 
     // Part thresholds.
     for (const w of watches) {
@@ -458,7 +502,7 @@ export function runExperiment(build: VehicleBuild, scenario: Scenario): RunResul
     if (t + dt > stopAt) dt = Math.max(0.02, stopAt - t);
   }
 
-  env = atmosphere(altitude);
+  env = world.sample(altitude);
   record(t, env, 0, yieldFraction(frameMat, net.T[R.frame!]), deathS === null, batteryWh > 0, false);
 
   events.sort((a, b) => a.t - b.t);
@@ -477,7 +521,7 @@ export function runExperiment(build: VehicleBuild, scenario: Scenario): RunResul
       landedS,
       touchdownMs,
       firstFailure,
-      headline: headline(build, deathS, walkStopS, landedS, t),
+      headline: headline(build, deathS, walkStopS, landedS, t) + world.summary(),
     },
     durationS: t,
     computeMs: performance.now() - t0,
@@ -510,7 +554,7 @@ function headline(b: VehicleBuild, death: number | null, walkStop: number | null
   if (death === null) return `${b.name} is still working after ${formatDuration(end)}.`;
   if (landed === null || death < landed) return `${b.name} died during descent, ${formatDuration(death)} after the start.`;
   const alive = formatDuration(onSurface(death));
-  const moved = b.mechanics.kind === "wheeled" ? "Drove" : "Walked";
+  const moved = b.mechanics.kind === "wheeled" || b.mechanics.kind === "rover" ? "Drove" : "Walked";
   if (walkStop !== null && walkStop <= (landed ?? 0) + 0.5 && b.mechanics.kind === "wheeled") return `Never moved; electronics dead after ${alive}.`;
   if (walkStop !== null && walkStop < death) return `${moved} for ${formatDuration(onSurface(walkStop))}, dead after ${alive} on the surface.`;
   return `Survived ${alive} on the surface.`;
@@ -533,6 +577,7 @@ function resample(raw: number[][], nNodes: number, points: number): Series {
     controller: new Uint8Array(m),
     power: new Uint8Array(m),
     canWalk: new Uint8Array(m),
+    world: Object.fromEntries(WORLD_CHANNELS.map((c) => [c, new Float64Array(m)])) as Record<WorldChannel, Float64Array>,
   };
   let j = 0;
   for (let k = 0; k < m; k++) {
@@ -554,6 +599,12 @@ function resample(raw: number[][], nNodes: number, points: number): Series {
     s.power[k] = a[9];
     s.canWalk[k] = a[10];
     for (let i = 0; i < nNodes; i++) s.nodeK[i][k] = L(11 + i);
+    WORLD_CHANNELS.forEach((c, i) => {
+      const col = 11 + nNodes + i;
+      // Angles and clocks wrap (359° -> 0°, 23 h -> 0 h): don't interpolate across the wrap.
+      const jumps = Math.abs(b[col] - a[col]) > (c === "localHour" ? 12 : 180);
+      s.world[c][k] = c === "awake" || jumps ? a[col] : L(col);
+    });
   }
   return s;
 }
@@ -585,6 +636,13 @@ export function stateAt(r: RunResult, t: number) {
     power: s.power[lo] === 1,
     canWalk: s.canWalk[lo] === 1,
     nodeK: s.nodeK.map(L),
+    world: Object.fromEntries(
+      WORLD_CHANNELS.map((c) => {
+        const a = s.world[c];
+        const wraps = c === "awake" || Math.abs(a[hi] - a[lo]) > (c === "localHour" ? 12 : 180);
+        return [c, wraps ? a[lo] : L(a)];
+      }),
+    ) as Record<WorldChannel, number>,
   };
 }
 

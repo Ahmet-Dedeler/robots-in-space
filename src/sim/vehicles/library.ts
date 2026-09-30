@@ -4,6 +4,7 @@
  * which.
  */
 import { cToK } from "../constants";
+import { PLANETARY_VEHICLES } from "./planetary";
 import type { VehicleBuild } from "./types";
 
 const optimus: VehicleBuild = {
@@ -212,7 +213,7 @@ const cat262: VehicleBuild = {
   initialTempK: cToK(20),
 };
 
-export const VEHICLES: VehicleBuild[] = [optimus, g1, g1Hardened, cat262, venera13, sealedBox];
+export const VEHICLES: VehicleBuild[] = [optimus, g1, g1Hardened, cat262, venera13, sealedBox, ...PLANETARY_VEHICLES];
 
 export function vehicleById(id: string): VehicleBuild | undefined {
   return VEHICLES.find((v) => v.id === id);

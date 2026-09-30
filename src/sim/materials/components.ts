@@ -92,6 +92,17 @@ const BATTERIES_TABLE = {
     runawayFactor: 2,
     notes: "Separator melts ~130 °C; thermal runaway releases more than the stored electrical energy.",
   },
+  liIonSpace: {
+    id: "liIonSpace",
+    category: "battery",
+    name: "Li-ion, low-temp electrolyte (JPL, MER/MSL)",
+    warnK: c(40),
+    failK: c(150),
+    minOperatingK: c(-30),
+    whPerKg: 90,
+    runawayFactor: 2,
+    notes: "Yardney/JPL cells with a low-temperature electrolyte: ~70% capacity at -30 °C (Smart et al. 2004). Heavier than consumer packs.",
+  },
   lfp: { id: "lfp", category: "battery", name: "LiFePO4", warnK: c(60), failK: c(220), minOperatingK: c(-20), whPerKg: 120, runawayFactor: 0.6 },
   leadAcid: {
     id: "leadAcid",

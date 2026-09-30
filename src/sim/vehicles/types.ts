@@ -10,6 +10,7 @@ import type {
   WindingId,
 } from "../materials/components";
 import type { MaterialId } from "../materials/materials";
+import type { PlanetScenario } from "../planets/world";
 
 /** How much to trust a model. Shown on every vehicle and result. */
 export type Fidelity = "validated" | "calibrated" | "approximation" | "hypothetical";
@@ -22,7 +23,15 @@ export type Mechanics =
       finish?: "stock" | "white" | "titanium";
     }
   | { kind: "static"; shape: "lander" | "box" }
-  | { kind: "wheeled"; model: "skidsteer" };
+  | { kind: "wheeled"; model: "skidsteer" }
+  /**
+   * Planetary rovers: kinematic 3D model (no MuJoCo). `speedMs` is the drive
+   * speed; `dutyCycle` the share of waking time spent driving (the motors'
+   * `electricW` is already averaged over it).
+   */
+  | { kind: "rover"; model: RoverModel; speedMs: number; dutyCycle: number };
+
+export type RoverModel = "yutu" | "pragyan" | "mer" | "msl" | "lunokhod" | "crawler";
 
 export interface DescentStage {
   /** Stage becomes active once altitude drops below this [km]. */
@@ -55,7 +64,13 @@ export interface VehicleBuild {
   /** Equivalent diameter for external convection [m]. */
   charLengthM: number;
 
-  skin: { material: MaterialId; massKg: number; emissivity: number };
+  skin: {
+    material: MaterialId;
+    massKg: number;
+    emissivity: number;
+    /** Solar absorptivity; defaults to the material's as-received value (planets/cold.ts). */
+    absorptivity?: number;
+  };
   frame: {
     material: MaterialId;
     massKg: number;
@@ -74,6 +89,13 @@ export interface VehicleBuild {
         hull: { material: MaterialId; radiusM: number; thicknessMm: number };
         seal: SealId;
         /** Internal gas + radiation coupling inside the hull [W/m^2/K]. */
+        internalH: number;
+      }
+    | {
+        /** Unpressurized insulated box (a rover's warm electronics box): parts inside, joints and wheels outside. */
+        kind: "box";
+        wall: { material: MaterialId; areaM2: number; thicknessMm: number };
+        /** Radiation + conduction coupling inside the box [W/m^2/K]. */
         internalH: number;
       };
 
@@ -107,12 +129,29 @@ export interface VehicleBuild {
   /** Active cooler (Stirling-class heat pump) pumping from the electronics bay to the skin. */
   cooler?: { electricW: number; carnotFraction: number; setpointK: number };
   /** Radioisotope power source. */
-  rtg?: { electricW: number; thermalW: number };
+  rtg?: {
+    electricW: number;
+    thermalW: number;
+    /** Share of the waste heat piped into the electronics bay and battery (Curiosity's fluid loop); the rest leaves from the shell. */
+    interiorFraction?: number;
+  };
+  /** Solar array. `tracking` faces the Sun; `vertical` suits the lunar poles, where the Sun skims the horizon. */
+  solar?: { areaM2: number; efficiency: number; mount: "horizontal" | "tracking" | "vertical" };
+  /** Sleep through the night: everything off except heaters and a receiver/clock drawing `sleepW`. */
+  hibernate?: { sleepW: number };
+  /** Thermostatic survival heaters on the electronics bay and battery. */
+  heaters?: { electricW: number; setpointK: number };
+  /** Radioisotope heater units in the electronics bay and battery [W thermal]. */
+  rhuW?: number;
+  /** Switchable radiator (heat switch / louver) that dumps heat from inside the box to space when it runs warm. */
+  radiator?: { areaM2: number; openAboveK: number };
   /** Instruments and internal structure lumped as one node [kg]. */
   payloadMassKg: number;
 
   initialTempK: number;
   /** Default landing elevation for this vehicle's scenario [m]. */
   homeElevationM?: number;
+  /** Default world for this vehicle (Venus when absent). */
+  home?: Omit<PlanetScenario, "chaseSun"> & { chaseSun?: boolean };
   descent?: { stages: DescentStage[] };
 }

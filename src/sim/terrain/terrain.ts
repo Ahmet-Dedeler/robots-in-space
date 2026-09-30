@@ -20,9 +20,23 @@
  * Plate sizes and exact layer counts are read off the panoramas (5 cm scale
  * notches on the lander rings), so they are estimates, not measurements.
  *
+ * Moon, Mars and Mercury ground (styles with a `body`) adds two statistical
+ * models on top:
+ * - Craters: cumulative density N(>D) = n1 D^-2 per m^2. On the Moon and
+ *   Mercury small craters are in equilibrium (as many erased as formed):
+ *   n1 ~ 10^-1.1 (Gault 1970; Trask 1966). Mars erases small craters with
+ *   wind, so n1 is 10-50x lower at the rover sites. Simple bowl profile,
+ *   depth/diameter 0.2 when fresh, most much shallower (degraded).
+ * - Rocks: Golombek & Rapp (1997) rock abundance, the fraction of area
+ *   covered by rocks wider than D: F(D) = k exp(-q D), q = 1.79 + 0.152/k.
+ *   k is the total rock cover: ~0.01 on lunar mare and Meridiani, ~0.07 at
+ *   Viking 1 / Gale, ~0.16 at Viking 2 / Pathfinder. Rock height ~ D/2.
+ * - Ripples: aeolian bedforms (Meridiani granule ripples, ~1-2 cm high).
+ *
  * h(x, y) is a pure deterministic function in metres (x east, y north, z up),
  * shared by the MuJoCo collision heightfield and the rendered ground.
  */
+import type { BodyId } from "../planets/bodies";
 
 export interface TerrainStyle {
   id: string;
@@ -51,6 +65,14 @@ export interface TerrainStyle {
   sedimentColor: [number, number, number];
   /** Coulomb friction for feet (basalt/sediment, dry, no water). */
   friction: number;
+  /** World this ground belongs to (Venus when absent; `flat` works anywhere). */
+  body?: BodyId;
+  /** Crater population: N(>D) = n1 D^-2 per m^2 for D in [dMin, dMax] m; depth/D range. */
+  craters?: { n1: number; dMin: number; dMax: number; depthRatio: readonly [number, number] };
+  /** Golombek-Rapp rock abundance k, rocks from dMin to dMax [m]. */
+  rocks?: { k: number; dMin: number; dMax: number };
+  /** Wind ripples: height [m], wavelength [m], crest direction [deg from east]. */
+  ripples?: { height: number; wavelength: number; dirDeg: number };
 }
 
 export const TERRAINS = {
@@ -122,7 +144,136 @@ export const TERRAINS = {
     sedimentColor: [0.1, 0.085, 0.07],
     friction: 0.75,
   },
+  // ---- Moon ---------------------------------------------------------------------
+  lunarMare: {
+    id: "lunarMare",
+    name: "Lunar mare regolith",
+    note: "Apollo 11/12, Chang'e: fine grey regolith pocked with craters of every size, few rocks (~1% cover).",
+    body: "moon",
+    plateSize: 0,
+    plateThickness: [0, 0],
+    plateCoverage: 0,
+    layerChance: 0,
+    crackWidth: 0,
+    tiltDeg: 0,
+    sedimentFill: 0,
+    slopeDeg: 0,
+    boulders: { density: 0, maxWidth: 0, maxHeight: 0 },
+    craters: { n1: 0.079, dMin: 0.4, dMax: 24, depthRatio: [0.03, 0.2] },
+    rocks: { k: 0.01, dMin: 0.04, dMax: 0.8 },
+    // Mare regolith reflects ~7-10% (Apollo photometry); slightly brownish grey.
+    rockColor: [0.13, 0.125, 0.115],
+    sedimentColor: [0.085, 0.08, 0.074],
+    friction: 0.8,
+  },
+  lunarHighlands: {
+    id: "lunarHighlands",
+    name: "Lunar highlands",
+    note: "Brighter anorthositic regolith, older and more cratered, more blocks (Apollo 16, south pole).",
+    body: "moon",
+    plateSize: 0,
+    plateThickness: [0, 0],
+    plateCoverage: 0,
+    layerChance: 0,
+    crackWidth: 0,
+    tiltDeg: 0,
+    sedimentFill: 0,
+    slopeDeg: 4,
+    boulders: { density: 0, maxWidth: 0, maxHeight: 0 },
+    craters: { n1: 0.079, dMin: 0.4, dMax: 30, depthRatio: [0.03, 0.2] },
+    rocks: { k: 0.02, dMin: 0.04, dMax: 1.2 },
+    rockColor: [0.26, 0.25, 0.24],
+    sedimentColor: [0.19, 0.185, 0.175],
+    friction: 0.8,
+  },
+  // ---- Mars -----------------------------------------------------------------------
+  marsGale: {
+    id: "marsGale",
+    name: "Gale crater floor",
+    note: "Curiosity's drive: dusty gravel, fractured sandstone slabs and scattered angular rocks (k ~0.07).",
+    body: "mars",
+    plateSize: 0.9,
+    plateThickness: [0.02, 0.06],
+    plateCoverage: 0.3,
+    layerChance: 0.25,
+    crackWidth: 0.03,
+    tiltDeg: 4,
+    sedimentFill: 0.55,
+    slopeDeg: 0,
+    boulders: { density: 0, maxWidth: 0, maxHeight: 0 },
+    craters: { n1: 0.004, dMin: 0.8, dMax: 24, depthRatio: [0.03, 0.12] },
+    rocks: { k: 0.07, dMin: 0.04, dMax: 1 },
+    // Reflectance of Martian dust ~0.35 red / 0.2 green / 0.08 blue; rocks are darker basalt under dust.
+    rockColor: [0.2, 0.12, 0.075],
+    sedimentColor: [0.32, 0.18, 0.09],
+    friction: 0.7,
+  },
+  marsRocky: {
+    id: "marsRocky",
+    name: "Rock-strewn plains (Viking 2 / Jezero)",
+    note: "Dense field of vesicular basalt blocks on fine dust (k ~0.16, the rocky end of Mars).",
+    body: "mars",
+    plateSize: 0,
+    plateThickness: [0, 0],
+    plateCoverage: 0,
+    layerChance: 0,
+    crackWidth: 0,
+    tiltDeg: 0,
+    sedimentFill: 0,
+    slopeDeg: 0,
+    boulders: { density: 0, maxWidth: 0, maxHeight: 0 },
+    craters: { n1: 0.003, dMin: 0.8, dMax: 20, depthRatio: [0.03, 0.1] },
+    rocks: { k: 0.16, dMin: 0.04, dMax: 1.2 },
+    rockColor: [0.17, 0.11, 0.075],
+    sedimentColor: [0.33, 0.19, 0.095],
+    friction: 0.7,
+  },
+  marsMeridiani: {
+    id: "marsMeridiani",
+    name: "Meridiani sand ripples",
+    note: "Opportunity's plains: dark basaltic sand in ripples over flat sulfate outcrop, almost no rocks.",
+    body: "mars",
+    plateSize: 1.4,
+    plateThickness: [0.01, 0.03],
+    plateCoverage: 0.2,
+    layerChance: 0.5,
+    crackWidth: 0.05,
+    tiltDeg: 1,
+    sedimentFill: 0.9,
+    slopeDeg: 0,
+    boulders: { density: 0, maxWidth: 0, maxHeight: 0 },
+    craters: { n1: 0.002, dMin: 1, dMax: 20, depthRatio: [0.05, 0.15] },
+    rocks: { k: 0.008, dMin: 0.03, dMax: 0.4 },
+    ripples: { height: 0.02, wavelength: 3, dirDeg: 30 },
+    rockColor: [0.3, 0.2, 0.12],
+    sedimentColor: [0.16, 0.1, 0.065],
+    friction: 0.65,
+  },
+  // ---- Mercury ------------------------------------------------------------------
+  mercuryPlains: {
+    id: "mercuryPlains",
+    name: "Mercury smooth plains",
+    note: "Lunar-like cratered regolith, darker and less red than the Moon (MESSENGER).",
+    body: "mercury",
+    plateSize: 0,
+    plateThickness: [0, 0],
+    plateCoverage: 0,
+    layerChance: 0,
+    crackWidth: 0,
+    tiltDeg: 0,
+    sedimentFill: 0,
+    slopeDeg: 0,
+    boulders: { density: 0, maxWidth: 0, maxHeight: 0 },
+    craters: { n1: 0.079, dMin: 0.4, dMax: 24, depthRatio: [0.03, 0.2] },
+    rocks: { k: 0.01, dMin: 0.04, dMax: 0.8 },
+    rockColor: [0.1, 0.1, 0.1],
+    sedimentColor: [0.07, 0.07, 0.072],
+    friction: 0.8,
+  },
 } as const satisfies Record<string, TerrainStyle>;
+
+export const terrainsFor = (body: BodyId) =>
+  Object.values(TERRAINS).filter((t: TerrainStyle) => (t.body ?? "venus") === body || t.id === "flat");
 
 export type TerrainId = keyof typeof TERRAINS;
 
@@ -189,7 +340,12 @@ export class Terrain {
     this.slope = Math.tan((style.slopeDeg * Math.PI) / 180);
     // One candidate boulder per cell; probability sets the density.
     this.boulderCell = style.boulders.density > 0 ? Math.max(style.boulders.maxWidth * 1.4, 0.25) : 0;
+    this.rockBins = style.rocks ? rockBins(style.rocks) : [];
+    this.craterBins = style.craters ? craterBins(style.craters) : [];
   }
+
+  private readonly rockBins: Bin[];
+  private readonly craterBins: Bin[];
 
   /**
    * Large-scale ground: the local site slope (Venera 9's talus is a local
@@ -213,6 +369,13 @@ export class Terrain {
     // Sediment: fine grains (mm) over a slightly wavy fill level.
     let sediment = s.sedimentFill * tMean + 0.006 * (fbm(x / 0.5, y / 0.5, this.seed + 9, 2) - 0.5);
     if (s.id === "venera9") sediment += 0.02 * (fbm(x / 0.15, y / 0.15, this.seed + 21, 2) - 0.5); // coarse gravel
+    if (s.ripples) {
+      const a = (s.ripples.dirDeg * Math.PI) / 180;
+      const u = (x * Math.cos(a) + y * Math.sin(a)) / s.ripples.wavelength + 0.3 * fbm(x / 6, y / 6, this.seed + 61, 2);
+      // Asymmetric crest: gentle stoss side, steeper lee.
+      const f = u - Math.floor(u);
+      sediment += s.ripples.height * (f < 0.7 ? f / 0.7 : (1 - f) / 0.3) * (0.6 + 0.4 * fbm(x / 9, y / 9, this.seed + 62, 2));
+    }
     let h = sediment;
     let kind: 0 | 1 | 2 = 0;
     let shade = fbm(x * 3, y * 3, this.seed + 3, 2);
@@ -295,7 +458,96 @@ export class Terrain {
       }
     }
 
-    return { h: h + base, kind, shade, edge };
+    if (this.rockBins.length) {
+      const r = this.rock(x, y);
+      if (r && r.h > h) {
+        h = r.h;
+        kind = 2;
+        shade = r.shade;
+      }
+    }
+
+    return { h: h + base + (this.craterBins.length ? this.crater(x, y) : 0), kind, shade, edge };
+  }
+
+  /** Golombek-Rapp rocks, one size bin at a time. Height above the local ground [m]. */
+  private rock(x: number, y: number): { h: number; shade: number } | null {
+    let best: { h: number; shade: number } | null = null;
+    for (let bi = 0; bi < this.rockBins.length; bi++) {
+      const bin = this.rockBins[bi];
+      const cs = bin.cell;
+      const ci = Math.floor(x / cs);
+      const cj = Math.floor(y / cs);
+      const sd = this.seed + 101 + bi * 13;
+      for (let di = -1; di <= 1; di++) {
+        for (let dj = -1; dj <= 1; dj++) {
+          const i = ci + di;
+          const j = cj + dj;
+          for (let m = 0; m < bin.perCell; m++) {
+            if (hash2(i, j, sd + m * 7) > bin.p) continue;
+            const D = bin.sample(hash2(i, j, sd + m * 7 + 1));
+            const a = D / 2;
+            const bb = a * (0.6 + 0.4 * hash2(i, j, sd + m * 7 + 2));
+            const H = D * (0.35 + 0.3 * hash2(i, j, sd + m * 7 + 3));
+            const cx = (i + hash2(i, j, sd + m * 7 + 4)) * cs;
+            const cy = (j + hash2(i, j, sd + m * 7 + 5)) * cs;
+            const rot = Math.PI * hash2(i, j, sd + m * 7 + 6);
+            const dx = x - cx;
+            const dy = y - cy;
+            if (dx * dx + dy * dy > a * a) continue;
+            const u = (Math.cos(rot) * dx + Math.sin(rot) * dy) / a;
+            const v = (-Math.sin(rot) * dx + Math.cos(rot) * dy) / bb;
+            const q = Math.abs(u) ** 3 + Math.abs(v) ** 3;
+            if (q >= 1) continue;
+            const facet = 0.85 + 0.3 * valueNoise(u * 2.5 + i, v * 2.5 + j, sd + 5);
+            const hb = H * Math.pow(1 - q, 0.35) * facet - 0.2 * H;
+            if (!best || hb > best.h) best = { h: hb, shade: hash2(i, j, sd + m * 7 + 8) };
+          }
+        }
+      }
+    }
+    return best;
+  }
+
+  /** Sum of simple-crater profiles (bowl + rim + ejecta falloff) [m]. */
+  private crater(x: number, y: number): number {
+    const c = this.style.craters!;
+    let dz = 0;
+    for (let bi = 0; bi < this.craterBins.length; bi++) {
+      const bin = this.craterBins[bi];
+      const cs = bin.cell;
+      const ci = Math.floor(x / cs);
+      const cj = Math.floor(y / cs);
+      const sd = this.seed + 301 + bi * 17;
+      for (let di = -1; di <= 1; di++) {
+        for (let dj = -1; dj <= 1; dj++) {
+          const i = ci + di;
+          const j = cj + dj;
+          for (let m = 0; m < bin.perCell; m++) {
+            if (hash2(i, j, sd + m * 5) > bin.p) continue;
+            const D = bin.sample(hash2(i, j, sd + m * 5 + 1));
+            const R = D / 2;
+            const cx = (i + hash2(i, j, sd + m * 5 + 2)) * cs;
+            const cy = (j + hash2(i, j, sd + m * 5 + 3)) * cs;
+            const r = Math.hypot(x - cx, y - cy);
+            if (r > 1.6 * R) continue;
+            // Most craters are old and shallow; a few are fresh bowls.
+            const fresh = hash2(i, j, sd + m * 5 + 4) ** 2.5;
+            const dr = c.depthRatio[0] + (c.depthRatio[1] - c.depthRatio[0]) * fresh;
+            const depth = dr * D;
+            const rim = 0.18 * depth;
+            const rr = r / R;
+            let z: number;
+            if (rr < 1) z = rim - depth + depth * rr ** 2 * (0.6 + 0.4 * rr ** 2);
+            else z = rim * rr ** -3 * (1 - smoothstep(1.2, 1.6, rr));
+            // Soften the rim crest on degraded craters.
+            if (rr > 0.85 && rr < 1.15) z = z * (1 - 0.5 * (1 - fresh)) + rim * 0.5 * (1 - fresh) * (1 - Math.abs(rr - 1) / 0.15);
+            dz += z;
+          }
+        }
+      }
+    }
+    return dz;
   }
 
   height(x: number, y: number): number {
@@ -352,6 +604,52 @@ export class Terrain {
     }
     return out;
   }
+}
+
+interface Bin {
+  cell: number;
+  /** Candidates per cell and the chance each one exists. */
+  perCell: number;
+  p: number;
+  /** Diameter from a uniform random number. */
+  sample: (u: number) => number;
+}
+
+/** Split a number density into log-spaced size bins with a cell grid each (3x3 search must cover a feature). */
+function makeBins(dMin: number, dMax: number, count: (d1: number, d2: number) => number, reach: number, sample: (d1: number, d2: number, u: number) => number): Bin[] {
+  const bins: Bin[] = [];
+  const nb = Math.max(1, Math.round(Math.log(dMax / dMin) / Math.log(2.2)));
+  for (let b = 0; b < nb; b++) {
+    const d1 = dMin * (dMax / dMin) ** (b / nb);
+    const d2 = dMin * (dMax / dMin) ** ((b + 1) / nb);
+    const n = count(d1, d2); // per m^2
+    if (n <= 0) continue;
+    const cell = Math.max(reach * d2, 0.05);
+    const expected = n * cell * cell;
+    const perCell = Math.max(1, Math.ceil(expected / 0.8));
+    bins.push({ cell, perCell, p: expected / perCell, sample: (u) => sample(d1, d2, u) });
+  }
+  return bins;
+}
+
+function rockBins(r: { k: number; dMin: number; dMax: number }): Bin[] {
+  const q = 1.79 + 0.152 / r.k;
+  // Number density from F(D) = k exp(-qD): n(D) dD = k q exp(-qD) / (pi D^2 / 4) dD.
+  const count = (d1: number, d2: number) => {
+    let s = 0;
+    const steps = 40;
+    for (let i = 0; i < steps; i++) {
+      const d = d1 + ((d2 - d1) * (i + 0.5)) / steps;
+      s += ((r.k * q * Math.exp(-q * d)) / ((Math.PI * d * d) / 4)) * ((d2 - d1) / steps);
+    }
+    return s;
+  };
+  // Within a bin the 1/D^2 term dominates: inverse CDF of D^-2.
+  return makeBins(r.dMin, r.dMax, count, 0.55, (d1, d2, u) => 1 / (1 / d1 - u * (1 / d1 - 1 / d2)));
+}
+
+function craterBins(c: { n1: number; dMin: number; dMax: number }): Bin[] {
+  return makeBins(c.dMin, c.dMax, (d1, d2) => c.n1 * (d1 ** -2 - d2 ** -2), 0.8, (d1, d2, u) => (d1 ** -2 - u * (d1 ** -2 - d2 ** -2)) ** -0.5);
 }
 
 export function terrain(id: TerrainId, seed?: number): Terrain {
