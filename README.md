@@ -39,6 +39,10 @@ pnpm dev
 
 Tests: `pnpm test`. Rebuild the baked data: `pnpm bake:co2` and `pnpm bake:robots` (need [uv](https://docs.astral.sh/uv/)).
 
+## License
+
+MIT for this project's code. Robot models and policies are BSD 3-Clause (Unitree). See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
 ## Sources and credits
 
 - Robot models and policies: [unitreerobotics/unitree_rl_gym](https://github.com/unitreerobotics/unitree_rl_gym)
