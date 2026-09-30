@@ -8,15 +8,29 @@
  *
  * Mechanics always run in real time. The thermal clock can be warped, so a
  * 10-minute soak plays out while you watch the robot walk.
+ *
+ * Damage is visual *and* mechanical: covers soften, char, slump and drip
+ * (driven by the skin temperature), a battery in runaway glows and vents, and
+ * a weakening frame caps how much load the joints can carry.
  */
 import { useFrame, useThree } from "@react-three/fiber";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { useLab } from "@/lib/lab-store";
 import { atmosphere } from "@/sim/env/atmosphere";
 import { stateAt } from "@/sim/mission/run";
 import { WalkController } from "@/sim/robots/policy";
 import { createRobotSim, type RobotSim } from "../mujoco";
+import {
+  applyShellDamage,
+  createDamageMaterial,
+  createDamageUniforms,
+  incandescence,
+  shellDamage,
+  skinMaterialOf,
+  type DamageUniforms,
+} from "./damage";
+import { MeltDrips, Plume, type DripsHandle, type PlumeHandle } from "./effects";
 
 const MJ_MESH = 7;
 
@@ -27,10 +41,17 @@ const FINISH = {
 } as const;
 export type Finish = keyof typeof FINISH;
 
-function buildMeshes(sim: RobotSim, finish: Finish): { group: THREE.Group; meshes: { geom: number; obj: THREE.Mesh }[] } {
+interface RigMesh {
+  geom: number;
+  obj: THREE.Mesh;
+  /** Visible vertex count, used to sample drip/fume sources. */
+  verts: number;
+}
+
+function buildMeshes(sim: RobotSim, finish: Finish, uniforms: DamageUniforms): { group: THREE.Group; meshes: RigMesh[] } {
   const { model } = sim;
   const group = new THREE.Group();
-  const meshes: { geom: number; obj: THREE.Mesh }[] = [];
+  const meshes: RigMesh[] = [];
   const vert = model.mesh_vert as Float32Array;
   const face = model.mesh_face as Int32Array;
   const vadr = model.mesh_vertadr as Int32Array;
@@ -41,7 +62,9 @@ function buildMeshes(sim: RobotSim, finish: Finish): { group: THREE.Group; meshe
   const ggroup = model.geom_group as Int32Array;
   const gdata = model.geom_dataid as Int32Array;
   const grgba = model.geom_rgba as Float32Array;
+  const gbody = model.geom_bodyid as Int32Array;
   const geometries = new Map<number, THREE.BufferGeometry>();
+  const materials = new Map<string, THREE.MeshStandardMaterial>();
 
   for (let g = 0; g < model.ngeom; g++) {
     if (gtype[g] !== MJ_MESH || ggroup[g] !== 1) continue;
@@ -57,16 +80,23 @@ function buildMeshes(sim: RobotSim, finish: Finish): { group: THREE.Group; meshe
     // H1 meshes are all dark in the source model; for the white finish, only the smallest parts stay dark (joints).
     const f = FINISH[finish];
     const dark = finish === "white" ? fnum[m] < 400 : grgba[g * 4] < 0.4;
-    const mat = new THREE.MeshStandardMaterial({
-      color: new THREE.Color(dark ? f.dark : f.light),
-      metalness: dark ? 0.2 : f.metal,
-      roughness: 0.45,
-    });
+    // Body 1 is the pelvis/torso, where the battery sits: it can glow in runaway.
+    const torso = gbody[g] === 1;
+    const key = `${dark ? "d" : "l"}${torso ? "t" : ""}`;
+    let mat = materials.get(key);
+    if (!mat) {
+      mat = createDamageMaterial(
+        { color: new THREE.Color(dark ? f.dark : f.light), metalness: dark ? 0.2 : f.metal, roughness: 0.45 },
+        uniforms,
+        { shell: true, glow: torso },
+      );
+      materials.set(key, mat);
+    }
     const obj = new THREE.Mesh(geo, mat);
     obj.castShadow = true;
     obj.matrixAutoUpdate = false;
     group.add(obj);
-    meshes.push({ geom: g, obj });
+    meshes.push({ geom: g, obj, verts: vnum[m] });
   }
   return { group, meshes };
 }
@@ -74,13 +104,17 @@ function buildMeshes(sim: RobotSim, finish: Finish): { group: THREE.Group; meshe
 /** Everything the frame loop mutates lives here, outside React state. */
 interface Runtime {
   sim: RobotSim;
-  meshes: { geom: number; obj: THREE.Mesh }[];
+  meshes: RigMesh[];
   controller: WalkController;
   tau: Float64Array;
   frcLimit: Float64Array;
   acc: number;
   wasAlive: boolean;
   lastReset: number;
+  dripAcc: number;
+  fumeAcc: number;
+  ventAcc: number;
+  wasMelting: boolean;
 }
 
 export function HumanoidView({
@@ -99,6 +133,9 @@ export function HumanoidView({
   const runtime = useRef<Runtime | null>(null);
   const followTarget = useRef(new THREE.Vector3(0, 0.8, 0));
   const tmp = useRef(new THREE.Matrix4());
+  const uniforms = useMemo(() => createDamageUniforms(), []);
+  const drips = useRef<DripsHandle>(null);
+  const plume = useRef<PlumeHandle>(null);
   const camera = useThree((s) => s.camera);
   const controls = useThree((s) => s.controls) as unknown as { target: THREE.Vector3; update: () => void } | null;
 
@@ -109,7 +146,7 @@ export function HumanoidView({
     createRobotSim(robot, { gravity: atm.gravity, density: atm.densityKgM3, viscosity: atm.gas.mu, windMs })
       .then((sim) => {
         if (cancelled) return sim.dispose();
-        const rig = buildMeshes(sim, finish);
+        const rig = buildMeshes(sim, finish, uniforms);
         const trn = sim.model.actuator_trnid as Int32Array;
         const range = sim.model.jnt_actfrcrange as Float64Array;
         runtime.current = {
@@ -121,6 +158,10 @@ export function HumanoidView({
           acc: 0,
           wasAlive: true,
           lastReset: useLab.getState().playback.resetToken,
+          dripAcc: 0,
+          fumeAcc: 0,
+          ventAcc: 0,
+          wasMelting: false,
         };
         setGroup(rig.group);
         onReady?.(true);
@@ -132,7 +173,7 @@ export function HumanoidView({
       runtime.current = null;
       setGroup(null);
     };
-  }, [robot, finish, elevationM, windMs, onReady]);
+  }, [robot, finish, elevationM, windMs, onReady, uniforms]);
 
   // Walking or standing still: same policy, zero velocity command.
   useEffect(() => {
@@ -154,13 +195,16 @@ export function HumanoidView({
       sim.mj.mj_resetData(sim.model, sim.data);
       sim.mj.mj_forward(sim.model, sim.data);
       controller.reset();
+      drips.current?.clear();
+      plume.current?.clear();
     }
     rt.wasAlive = alive;
 
     if (playback.playing) {
-      const frameOk = st.frameYieldFraction >= result.build.frame.loadFraction;
-      // Thermal model -> actuators: available torque, limp when the controller is dead.
-      const scale = alive ? st.torqueFraction * (frameOk ? 1 : 0.3) : 0;
+      // Thermal model -> actuators: available motor torque, capped by what the
+      // weakened frame can carry (yield strength vs its working stress); limp when dead.
+      const structural = Math.min(1, st.frameYieldFraction / result.build.frame.loadFraction);
+      const scale = alive ? st.torqueFraction * structural : 0;
       const dt = sim.model.opt.timestep;
       rt.acc = Math.min(rt.acc + delta, 0.1);
       const qpos = sim.data.qpos as Float64Array;
@@ -194,6 +238,73 @@ export function HumanoidView({
       obj.matrix.copy(m);
     }
 
+    // ---- Thermal damage visuals ---------------------------------------------------
+    const idx = (id: string) => result.nodes.findIndex((n) => n.id === id);
+    const skinK = st.nodeK[idx("skin")] ?? st.ambientK;
+    const dmg = shellDamage(skinMaterialOf(result.build), skinK);
+    applyShellDamage(uniforms, dmg);
+    const iB = idx("battery");
+    const batteryK = iB >= 0 ? st.nodeK[iB] : 0;
+    uniforms.uGlow.value.copy(incandescence(batteryK));
+    // Battery pack sits ~25 cm up the torso axis from the pelvis origin (MuJoCo z-up -> three y-up).
+    {
+      const xp = sim.data.xpos as Float64Array;
+      const xm = sim.data.xmat as Float64Array;
+      const bx = xp[3] + 0.25 * xm[9 + 2];
+      const by = xp[4] + 0.25 * xm[9 + 5];
+      const bz = xp[5] + 0.25 * xm[9 + 8];
+      uniforms.uGlowCenter.value.set(bx, bz, -by);
+    }
+
+    // Scrubbed back before the covers melted: remove puddles and fumes.
+    const melting = dmg.melt > 0.02;
+    if (!melting && rt.wasMelting) {
+      drips.current?.clear();
+      plume.current?.clear();
+    }
+    rt.wasMelting = melting;
+
+    if (playback.playing) {
+      const sample = () => {
+        const m = rt.meshes[Math.floor(Math.random() * rt.meshes.length)];
+        const pos = m.obj.geometry.attributes.position as THREE.BufferAttribute;
+        const v = new THREE.Vector3().fromBufferAttribute(pos, Math.floor(Math.random() * m.verts));
+        return v.applyMatrix4(m.obj.matrixWorld);
+      };
+      // Molten covers drip (rates are visual, but only while the model says it is molten).
+      rt.dripAcc += dmg.drip * 45 * delta;
+      const newDrips: THREE.Vector3[] = [];
+      while (rt.dripAcc >= 1) {
+        newDrips.push(sample());
+        rt.dripAcc -= 1;
+      }
+      if (newDrips.length) drips.current?.spawn(newDrips);
+      // Pyrolysis fumes off the covers.
+      rt.fumeAcc += dmg.fume * 30 * delta;
+      while (rt.fumeAcc >= 1) {
+        plume.current?.emit(sample(), { color: new THREE.Color(0.42, 0.36, 0.3), size: 0.07, rise: 0.22, spread: 0.02, life: 3.5 });
+        rt.fumeAcc -= 1;
+      }
+      // Battery venting after runaway, while the pack is still hotter than the air.
+      const runaway = result.events.find((e) => e.title === "Thermal runaway");
+      const excess = batteryK - st.ambientK;
+      if (runaway && playback.t >= runaway.t && excess > 30) {
+        rt.ventAcc += Math.min(1, excess / 400) * 70 * delta;
+        const torso = uniforms.uGlowCenter.value.clone();
+        const hot = Math.min(1, excess / 500);
+        while (rt.ventAcc >= 1) {
+          plume.current?.emit(torso, {
+            color: new THREE.Color(0.1 + 0.25 * hot, 0.09 + 0.1 * hot, 0.08),
+            size: 0.14,
+            rise: 0.6,
+            spread: 0.12,
+            life: 5,
+          });
+          rt.ventAcc -= 1;
+        }
+      }
+    }
+
     // Camera follows the pelvis (MuJoCo x,y,z -> three x,z,-y).
     const qp = sim.data.qpos as Float64Array;
     const target = followTarget.current;
@@ -206,6 +317,11 @@ export function HumanoidView({
     }
   });
 
-  if (!group) return null;
-  return <primitive object={group} rotation-x={-Math.PI / 2} />;
+  return (
+    <>
+      {group && <primitive object={group} rotation-x={-Math.PI / 2} />}
+      <MeltDrips ref={drips} />
+      <Plume ref={plume} />
+    </>
+  );
 }

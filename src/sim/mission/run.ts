@@ -176,6 +176,7 @@ export function runExperiment(build: VehicleBuild, scenario: Scenario): RunResul
   const skinMat = MATERIALS[build.skin.material];
   let skinSoftWarned = false;
   let skinMeltWarned = false;
+  let skinCharWarned = false;
   const frameMat = MATERIALS[build.frame.material];
   let frameWarned = false;
   let magnetWarned = false;
@@ -378,7 +379,11 @@ export function runExperiment(build: VehicleBuild, scenario: Scenario): RunResul
     }
     if (skinMat.meltK && !skinMeltWarned && Tskin > skinMat.meltK) {
       skinMeltWarned = true;
-      emit(t, "warn", "Outer shell melting", `${skinMat.name} melts/decomposes at ${kToC(skinMat.meltK).toFixed(0)} °C.`, "skin");
+      emit(t, "warn", "Outer shell melting", `${skinMat.name}: flows at ${kToC(skinMat.meltK).toFixed(0)} °C and starts dripping.`, "skin");
+    }
+    if (skinMat.decomposeK && !skinCharWarned && Tskin > skinMat.decomposeK) {
+      skinCharWarned = true;
+      emit(t, "warn", "Outer shell charring", `${skinMat.name}: decomposes above ${kToC(skinMat.decomposeK).toFixed(0)} °C. No oxygen to burn, so it pyrolyses into char and fumes.`, "skin");
     }
     if (build.enclosure.kind === "sealed" && !breached && R.hull !== undefined) {
       const { hull } = build.enclosure;

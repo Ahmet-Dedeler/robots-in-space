@@ -24,6 +24,8 @@ export interface Material {
   meltK?: number;
   /** Above this it softens / loses service properties [K]. */
   maxServiceK?: number;
+  /** Polymers: thermal decomposition onset in an inert gas (Venus CO2 has no free O2, so it chars, not burns) [K]. */
+  decomposeK?: number;
   /** Yield strength curve [degC, MPa]. */
   yieldCurve?: ReadonlyArray<readonly [number, number]>;
   /** Young's modulus curve [degC, GPa]. */
@@ -174,6 +176,7 @@ const MATERIAL_TABLE = {
     emissivity: 0.85,
     meltK: 600,
     maxServiceK: 423,
+    decomposeK: 620,
     yieldCurve: [
       [20, 600],
       [120, 540],
@@ -199,6 +202,8 @@ const MATERIAL_TABLE = {
     emissivity: 0.9,
     meltK: 616,
     maxServiceK: 523,
+    decomposeK: 850,
+    notes: "Melts at 343 °C but only decomposes above ~575 °C: on Venus it slumps and drips but does not char.",
   },
   pcabs: {
     id: "pcabs",
@@ -210,7 +215,8 @@ const MATERIAL_TABLE = {
     emissivity: 0.9,
     meltK: 500,
     maxServiceK: 383,
-    notes: "Typical humanoid shell plastic. Softens ~110-140 °C.",
+    decomposeK: 620,
+    notes: "Typical humanoid shell plastic. Softens ~110-140 °C, flows ~230 °C, decomposes (chars) from ~350 °C.",
   },
   microporous: {
     id: "microporous",

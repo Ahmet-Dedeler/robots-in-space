@@ -10,6 +10,7 @@ import { useMemo, useRef } from "react";
 import * as THREE from "three";
 import { useLab } from "@/lib/lab-store";
 import { stateAt } from "@/sim/mission/run";
+import { incandescence } from "./damage";
 
 /** A thin rod between two points. */
 function Strut({ from, to, radius = 0.03, color = "#77706a" }: { from: THREE.Vector3; to: THREE.Vector3; radius?: number; color?: string }) {
@@ -171,12 +172,9 @@ export function LanderView({ shape }: { shape: "lander" | "box" }) {
     const chuteOn = descending.current && stages.length > 1 && km > stages[1].belowKm;
     if (chute.current) chute.current.visible = chuteOn;
     if (streaks.current) streaks.current.visible = above > 60;
-    // Shell color warms with its temperature (visual only; real glow starts ~525 °C).
+    // Real incandescence only: nothing glows below ~525 °C, so a lander in 462 °C air stays dark.
     const skinK = st.nodeK[0] ?? 300;
-    if (glow.current) {
-      const f = Math.min(1, Math.max(0, (skinK - 400) / 400));
-      glow.current.emissive.setRGB(0.5 * f, 0.12 * f, 0.02 * f);
-    }
+    if (glow.current) glow.current.emissive.copy(incandescence(skinK));
     if (controls) {
       const target = new THREE.Vector3(0, y + 1, 0);
       const shift = target.clone().sub(controls.target);
