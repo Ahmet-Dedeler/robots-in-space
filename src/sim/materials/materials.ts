@@ -33,7 +33,7 @@ export interface Material {
   notes?: string;
 }
 
-export const MATERIALS = {
+const MATERIAL_TABLE = {
   al6061: {
     id: "al6061",
     name: "Aluminum 6061-T6",
@@ -290,7 +290,8 @@ export const MATERIALS = {
   },
 } as const satisfies Record<string, Material>;
 
-export type MaterialId = keyof typeof MATERIALS;
+export type MaterialId = keyof typeof MATERIAL_TABLE;
+export const MATERIALS: Record<MaterialId, Material> = MATERIAL_TABLE;
 
 export function material(id: MaterialId): Material {
   return MATERIALS[id];

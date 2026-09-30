@@ -2,7 +2,10 @@
 
 A browser sandbox for running experiments on Venus. You pick a thing (Optimus, a CAT truck, Venera 13, a balloon, Starship, or your own build), pick where it goes (surface, descent, cloud layer), run it, and see what happens and when: it walks, it drifts, it overheats, its motors lose torque, its frame sags, its electronics die. It isn't a textbook. The output of every run is a **failure timeline + telemetry**, and runs can be compared and swept.
 
-Status: planning. Nothing built yet. Researched 2026-10-01.
+Status (2026-10-01):
+- **Built:** Phase 0 and the Phase 1 MVP (surface drop test), plus Venera-style descent from Phase 2 and the sweep/compare/share parts of Phase 4.
+- **Stack:** Next.js 16 instead of Vite (decided with Ahmet).
+- **Next up:** Starship / rocket engines vs ambient pressure, the cloud layer (balloons), and VCD data.
 
 ---
 
@@ -87,7 +90,7 @@ MuJoCo WASM:            lumped nodes: shell,      RK4 3-DOF/6-DOF:
 
 ### Stack recommendation
 
-Vite + React + TypeScript + React Three Fiber + Web Workers (Comlink) + `@mujoco/mujoco` + uPlot for fast telemetry charts. Physics packages are pure TS with no DOM, so they run in Node for tests and sweeps too. Monorepo: `packages/env`, `packages/thermal`, `packages/materials`, `packages/trajectory`, `packages/mech` (MuJoCo glue), `apps/web`.
+Next.js 16 (App Router, Turbopack) + React 19 + TypeScript + React Three Fiber + `@mujoco/mujoco` + zustand + uPlot + Tailwind v4/shadcn. The lab page renders client-only. Physics packages are pure TS with no DOM, so they run in Node for tests and sweeps too. Monorepo: `packages/env`, `packages/thermal`, `packages/materials`, `packages/trajectory`, `packages/mech` (MuJoCo glue), `apps/web`.
 
 ---
 
@@ -171,3 +174,17 @@ Every model shows a **fidelity badge**: validated / approximation / guess. Peopl
 1. **Stack:** React + R3F (recommended, bigger ecosystem) or SvelteKit + Threlte (the same as veenie, so its UI copies over directly). The physics is portable either way.
 2. **First vertical slice:** surface drop test with Optimus-approx vs Venera 13 (recommended; it's the novel part and has a hard validation target) or Starship descent (more spectacular, less validation data).
 3. **VCD:** email LMD for the full offline database now (free, slow reply), in parallel with building on VIRA.
+
+---
+
+## 8. Build log
+
+**2026-10-01, MVP**
+- Sim core in `src/sim/`, with 16 tests: atmosphere, CO₂, convection, solver energy conservation, PCM, Venera 13 validation, humanoid survival, and policy parity.
+- The unitree_rl_gym G1/H1 policies still walk under Venus gravity and 65 kg/m³ CO₂ (checked in Python MuJoCo). They fall below ~58% / ~63% motor torque.
+- Stock humanoids on the surface:
+  - Optimus approx: e-bay dies ~80 s, frame yields ~1.7 min, Li-ion runaway ~3 min.
+  - G1: dead at ~45 s.
+- Hardened G1 (SiC, thermal battery, magnet-free motors, Ti frame): runs until its battery is empty, ~2 days idle.
+- Venera 13: 66 min descent, 7.0 m/s touchdown, ~2.1 h on the surface. Calibrated via insulation thickness (30 mm at k = 0.1).
+- Found while sweeping: structural struts matter. A strut conductance that was too high (5 W/K) capped the benefit of insulation. Real Ti struts are ~0.1 W/K; now 0.3 W/K.

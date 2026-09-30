@@ -4,7 +4,7 @@ import { runExperiment, formatDuration } from "../src/sim/mission/run";
 {
   const id = process.env.V ?? "venera13";
   const b = vehicleById(id)!;
-  const r = runExperiment(b, { elevationM: Number(process.env.EL ?? 1500), windMs: 0.5, start: process.env.S === "surface" ? { kind: "surface" } : { kind: "descent", fromKm: 62 }, activity: (process.env.A as any) ?? "idle" });
+  const r = runExperiment(b, { elevationM: Number(process.env.EL ?? 1500), windMs: 0.5, start: process.env.S === "surface" ? { kind: "surface" } : { kind: "descent", fromKm: 62 }, activity: process.env.A === "walking" ? "walking" : "idle" });
   console.log(r.verdict.headline, "compute", r.computeMs.toFixed(0), "ms", "landed", r.verdict.landedS && formatDuration(r.verdict.landedS));
   for (const e of r.events) console.log(formatDuration(e.t).padStart(9), e.severity.padEnd(6), e.title, "-", e.detail ?? "");
   const s = r.series; const m = s.t.length;

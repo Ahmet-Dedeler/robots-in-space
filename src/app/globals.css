@@ -128,3 +128,65 @@
     @apply font-sans;
   }
 }
+/* ---- Venus Lab theme: warm near-black surfaces, amber accent ---------------- */
+.dark {
+  --background: oklch(0.155 0.008 50);
+  --card: oklch(0.19 0.01 50);
+  --popover: oklch(0.19 0.01 50);
+  --primary: oklch(0.8 0.14 70);
+  --primary-foreground: oklch(0.2 0.02 50);
+  --ring: oklch(0.75 0.14 70);
+}
+
+/* uPlot on dark surfaces: legend in text tokens, never series colors. */
+.uplot-venus .u-legend {
+  font-size: 11px;
+  color: #d6d3d1;
+  text-align: left;
+  padding-top: 4px;
+}
+.uplot-venus .u-legend .u-series th {
+  font-weight: 400;
+}
+.uplot-venus .u-legend .u-value {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  color: #fafaf9;
+}
+.uplot-venus .u-legend .u-marker {
+  width: 10px;
+  height: 3px;
+  border-radius: 2px;
+}
+.uplot-venus .u-cursor-x,
+.uplot-venus .u-cursor-y {
+  border-color: rgba(255, 255, 255, 0.25) !important;
+}
+.uplot-venus .u-over {
+  cursor: pointer;
+}
+
+/* Scrubber. */
+.venus-range {
+  appearance: none;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  outline: none;
+}
+.venus-range::-webkit-slider-thumb {
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: #fbbf24;
+  box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.25);
+  cursor: pointer;
+}
+.venus-range::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border: 0;
+  border-radius: 999px;
+  background: #fbbf24;
+  cursor: pointer;
+}

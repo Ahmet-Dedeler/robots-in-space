@@ -86,7 +86,9 @@ export function buildThermalModel(b: VehicleBuild, batteryWhPerKg: number): Ther
     hull = add("hull", { label: `Pressure hull (${hm.name})`, C: hullMassKg * hm.cp });
     const gIns = insT > 0 ? (ins.k * area) / insT : 2000 * area;
     link(skin, hull, gIns);
-    link(frame, hull, 5);
+    // Structural attachments (struts/brackets through the insulation). Ti struts:
+    // k*A/L ~ 6.7 W/m/K * 10 x 7e-4 m^2 / 0.5 m ~ 0.1 W/K; allow for bolts and cabling.
+    link(frame, hull, 0.3);
   }
 
   /** Internal part: sealed -> couples to hull; open -> flooded, behind its jacket. */

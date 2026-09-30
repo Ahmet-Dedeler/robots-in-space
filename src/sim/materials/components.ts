@@ -56,7 +56,7 @@ export type Part = ElectronicsPart | BatteryPart | MagnetPart | GenericPart;
 
 const c = (deg: number) => deg + 273.15;
 
-export const ELECTRONICS = {
+const ELECTRONICS_TABLE = {
   siCommercial: { id: "siCommercial", category: "electronics", name: "Commercial silicon (0-85 °C)", warnK: c(85), failK: c(125) },
   siAutomotive: { id: "siAutomotive", category: "electronics", name: "Automotive silicon (AEC-Q100 grade 0)", warnK: c(150), failK: c(175) },
   siMilitary: { id: "siMilitary", category: "electronics", name: "Military silicon (-55-125 °C)", warnK: c(125), failK: c(150) },
@@ -70,8 +70,9 @@ export const ELECTRONICS = {
     notes: "Ran 60 days in GEER at 460 °C / 92 bar. Very low integration: think 1970s-era logic, not a GPU.",
   },
 } as const satisfies Record<string, ElectronicsPart>;
+export const ELECTRONICS: Record<keyof typeof ELECTRONICS_TABLE, ElectronicsPart> = ELECTRONICS_TABLE;
 
-export const BATTERIES = {
+const BATTERIES_TABLE = {
   liIon: {
     id: "liIon",
     category: "battery",
@@ -117,8 +118,9 @@ export const BATTERIES = {
     notes: "Electrolyte is solid until ~350 °C, so Venus heat keeps it running. Proposed for long-lived Venus landers.",
   },
 } as const satisfies Record<string, BatteryPart>;
+export const BATTERIES: Record<keyof typeof BATTERIES_TABLE, BatteryPart> = BATTERIES_TABLE;
 
-export const MAGNETS = {
+const MAGNETS_TABLE = {
   ndfebN: {
     id: "ndfebN",
     category: "magnet",
@@ -190,15 +192,17 @@ export const MAGNETS = {
     notes: "Heat-proof motor topology; limited only by winding insulation. ~30% less torque per kg.",
   },
 } as const satisfies Record<string, MagnetPart>;
+export const MAGNETS: Record<keyof typeof MAGNETS_TABLE, MagnetPart> = MAGNETS_TABLE;
 
-export const WINDINGS = {
+const WINDINGS_TABLE = {
   classF: { id: "classF", category: "winding", name: "Enamel wire, class F (155 °C)", warnK: c(155), failK: c(200) },
   classH: { id: "classH", category: "winding", name: "Enamel wire, class H (180 °C)", warnK: c(180), failK: c(230) },
   polyimide: { id: "polyimide", category: "winding", name: "Polyimide (Kapton) insulated", warnK: c(240), failK: c(400) },
   ceramic: { id: "ceramic", category: "winding", name: "Ceramic-coated / mineral insulated", warnK: c(600), failK: c(800) },
 } as const satisfies Record<string, GenericPart>;
+export const WINDINGS: Record<keyof typeof WINDINGS_TABLE, GenericPart> = WINDINGS_TABLE;
 
-export const SOLDERS = {
+const SOLDERS_TABLE = {
   snpb: { id: "snpb", category: "solder", name: "Sn63Pb37", warnK: c(150), failK: c(183) },
   sac305: { id: "sac305", category: "solder", name: "SAC305 lead-free", warnK: c(180), failK: c(217) },
   highPb: { id: "highPb", category: "solder", name: "High-lead Pb95Sn5", warnK: c(270), failK: c(308) },
@@ -212,32 +216,36 @@ export const SOLDERS = {
     notes: "NASA Glenn packaging that survived 60 days in GEER.",
   },
 } as const satisfies Record<string, GenericPart>;
+export const SOLDERS: Record<keyof typeof SOLDERS_TABLE, GenericPart> = SOLDERS_TABLE;
 
-export const LUBRICANTS = {
+const LUBRICANTS_TABLE = {
   grease: { id: "grease", category: "lubricant", name: "Mineral/synthetic grease", warnK: c(120), failK: c(180) },
   pfpe: { id: "pfpe", category: "lubricant", name: "PFPE (Krytox-class)", warnK: c(250), failK: c(320) },
   mos2: { id: "mos2", category: "lubricant", name: "MoS2 dry film", warnK: c(600), failK: c(800) },
 } as const satisfies Record<string, GenericPart>;
+export const LUBRICANTS: Record<keyof typeof LUBRICANTS_TABLE, GenericPart> = LUBRICANTS_TABLE;
 
-export const SEALS = {
+const SEALS_TABLE = {
   viton: { id: "viton", category: "seal", name: "Viton FKM O-ring", warnK: c(200), failK: c(260) },
   kalrez: { id: "kalrez", category: "seal", name: "Kalrez FFKM O-ring", warnK: c(300), failK: c(330) },
   metal: { id: "metal", category: "seal", name: "Metal C-seal / weld", warnK: c(700), failK: c(900) },
 } as const satisfies Record<string, GenericPart>;
+export const SEALS: Record<keyof typeof SEALS_TABLE, GenericPart> = SEALS_TABLE;
 
-export const CAMERAS = {
+const CAMERAS_TABLE = {
   cmos: { id: "cmos", category: "camera", name: "CMOS camera", warnK: c(70), failK: c(105) },
   hardened: { id: "hardened", category: "camera", name: "Vidicon/high-temp imager", warnK: c(150), failK: c(250) },
 } as const satisfies Record<string, GenericPart>;
+export const CAMERAS: Record<keyof typeof CAMERAS_TABLE, GenericPart> = CAMERAS_TABLE;
 
-export type ElectronicsId = keyof typeof ELECTRONICS;
-export type BatteryId = keyof typeof BATTERIES;
-export type MagnetId = keyof typeof MAGNETS;
-export type WindingId = keyof typeof WINDINGS;
-export type SolderId = keyof typeof SOLDERS;
-export type LubricantId = keyof typeof LUBRICANTS;
-export type SealId = keyof typeof SEALS;
-export type CameraId = keyof typeof CAMERAS;
+export type ElectronicsId = keyof typeof ELECTRONICS_TABLE;
+export type BatteryId = keyof typeof BATTERIES_TABLE;
+export type MagnetId = keyof typeof MAGNETS_TABLE;
+export type WindingId = keyof typeof WINDINGS_TABLE;
+export type SolderId = keyof typeof SOLDERS_TABLE;
+export type LubricantId = keyof typeof LUBRICANTS_TABLE;
+export type SealId = keyof typeof SEALS_TABLE;
+export type CameraId = keyof typeof CAMERAS_TABLE;
 
 /**
  * Motor torque available (relative to the stock motor at 20 °C) from magnet

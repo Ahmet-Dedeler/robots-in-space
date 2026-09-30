@@ -23,7 +23,7 @@ const optimus: VehicleBuild = {
     "Thermal/material numbers from public Optimus Gen 2 specs: ~57 kg, ~1.73 m, 2.3 kWh pack in the torso, automotive-grade AI computer.",
     "Actuator magnets assumed NdFeB SH grade and class H windings (typical for EV/robot motors); frame assumed aluminum.",
   ],
-  mechanics: { kind: "humanoid", robot: "h1" },
+  mechanics: { kind: "humanoid", robot: "h1", finish: "white" },
   massKg: 57,
   volumeM3: 0.05,
   exteriorAreaM2: 1.6,
@@ -88,6 +88,7 @@ const g1Hardened: VehicleBuild = {
   name: "G1, Venus-hardened (hypothetical)",
   tagline: "What it takes: no silicon, no rare-earth magnets, no lithium.",
   fidelity: "hypothetical",
+  mechanics: { kind: "humanoid", robot: "g1", finish: "titanium" },
   notes: [
     "Same body and walking policy as the G1, rebuilt from parts that are rated for 460 °C today.",
     "SiC JFET electronics (NASA Glenn, 60 days in GEER) on Pt/alumina boards; molten-salt thermal battery that only works when hot.",
@@ -135,13 +136,14 @@ const venera13: VehicleBuild = {
     // Low: Venera also had internal insulation between hull and equipment.
     internalH: 2.5,
   },
-  insulation: { material: "veneraFoam", thicknessMm: 33 },
+  insulation: { material: "veneraFoam", thicknessMm: 30 },
   electronics: { part: "siMilitary", solder: "snpb", massKg: 60, powerW: 300 },
   battery: { part: "silverZinc", capacityWh: 3000 },
   camera: "hardened",
   pcm: { material: "lnt", massKg: 40 },
   payloadMassKg: 150,
   initialTempK: cToK(-10),
+  homeElevationM: 1500,
   descent: {
     stages: [
       { belowKm: 1000, cdA: 25, label: "Parachute" },

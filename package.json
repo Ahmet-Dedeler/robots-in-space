@@ -6,7 +6,12 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "postinstall": "node scripts/copy-wasm.mjs",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "bake:co2": "cd tools && uv run python bake_co2.py",
+    "bake:robots": "cd tools && uv run python bake_robots.py"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",

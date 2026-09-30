@@ -14,7 +14,12 @@ import type { MaterialId } from "../materials/materials";
 export type Fidelity = "validated" | "calibrated" | "approximation" | "hypothetical";
 
 export type Mechanics =
-  | { kind: "humanoid"; robot: "g1" | "h1" }
+  | {
+      kind: "humanoid";
+      robot: "g1" | "h1";
+      /** Visual finish only. */
+      finish?: "stock" | "white" | "titanium";
+    }
   | { kind: "static"; shape: "lander" | "box" };
 
 export interface DescentStage {
@@ -97,5 +102,7 @@ export interface VehicleBuild {
   payloadMassKg: number;
 
   initialTempK: number;
+  /** Default landing elevation for this vehicle's scenario [m]. */
+  homeElevationM?: number;
   descent?: { stages: DescentStage[] };
 }
