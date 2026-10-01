@@ -1,6 +1,6 @@
 # Venus Lab
 
-What survives on Venus, and for how long?
+What survives on Venus, and for how long? **Try it: [venus-lab.vercel.app](https://venus-lab.vercel.app)**
 
 Venus Lab is a browser sandbox for Venus experiments. Pick something real (a Unitree G1, an Optimus-class humanoid, the Venera 13 lander) or build your own. Put it on the surface or drop it from 62 km, and watch it walk, cook, sag and die, with a timeline of exactly what failed first.
 
@@ -38,6 +38,10 @@ pnpm dev
 ```
 
 Tests: `pnpm test`. Rebuild the baked data: `pnpm bake:co2` and `pnpm bake:robots` (need [uv](https://docs.astral.sh/uv/)).
+
+## License
+
+MIT for this project's code. Robot models and policies are BSD 3-Clause (Unitree). See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ## Sources and credits
 
