@@ -74,8 +74,11 @@ export interface ColdHooks {
   batteryDead: () => void;
 }
 
-/** Extra series the mission loop records for charts and the 3D sky. */
-export const WORLD_CHANNELS = ["sunElevDeg", "sunAzDeg", "sunWm2", "solarW", "groundK", "localHour", "awake"] as const;
+/**
+ * Extra series the mission loop records for charts and the 3D sky.
+ * `clockS` is the world's solar clock (Mercury: seconds since perihelion), which the sky uses to place the stars.
+ */
+export const WORLD_CHANNELS = ["sunElevDeg", "sunAzDeg", "sunWm2", "solarW", "groundK", "localHour", "awake", "clockS"] as const;
 export type WorldChannel = (typeof WORLD_CHANNELS)[number];
 
 export interface World {
@@ -158,7 +161,7 @@ class VenusWorld implements World {
   mobilityOk = () => true;
   checkCold() {}
   advance() {}
-  channels = () => [0, 0, 0, 0, 0, 0, 1];
+  channels = () => [0, 0, 0, 0, 0, 0, 1, 0];
   setHooks() {}
   summary = () => "";
 }
@@ -542,7 +545,7 @@ class PlanetWorld implements World {
 
   channels(): number[] {
     const s = this.sun();
-    return [s.elevationDeg, s.azimuthDeg, this.light().global, this.solarW(), this.groundK(), s.localHour, this.sleeping ? 0 : 1];
+    return [s.elevationDeg, s.azimuthDeg, this.light().global, this.solarW(), this.groundK(), s.localHour, this.sleeping ? 0 : 1, this.tau];
   }
 
   summary(): string {

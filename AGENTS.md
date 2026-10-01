@@ -20,7 +20,7 @@ Browser sandbox for physics experiments on other worlds: drop a robot, rover, la
   - `thermal/`: lumped thermal network solver (implicit, enthalpy-based PCM)
   - `vehicles/`: `VehicleBuild` presets and the build → thermal network generator
   - `mission/run.ts`: runs an experiment and returns the series, events and verdict
-  - `planets/`: Moon, Mars, Mercury. `world.ts` is the environment the mission loop talks to (Venus is a pass-through to VIRA); `regolith.ts` ground temperatures, `solar.ts` the Sun, `mars.ts` Mars air/dust, `cold.ts` cold limits
+  - `planets/`: Moon, Mars, Mercury. `world.ts` is the environment the mission loop talks to (Venus is a pass-through to VIRA); `regolith.ts` ground temperatures, `solar.ts` the Sun, `mars.ts` Mars air/dust, `cold.ts` cold limits, `sky.ts` star/Earth/Phobos geometry for the 3D sky
   - `robots/policy.ts`: Unitree walking policy (LSTM + MLP) ported to TS
   - `robots/robot-world.ts`, `robots/machine-world.ts`: MuJoCo worlds (terrain heightfield, buoyancy, spec mass, plastic hinges), shared by the browser and Node tests
   - `robots/machines.ts`: Cat skid steer, track loader, D6 dozer, 320 excavator and NASA IPEx as MuJoCo definitions (spec-sheet geometry, hydraulic implements, work cycles). Their 3D models are in `components/lab/scene/machine-models.ts`; see `docs/machines.md`
@@ -28,7 +28,7 @@ Browser sandbox for physics experiments on other worlds: drop a robot, rover, la
   - `terrain/terrain.ts`: the Venera-derived ground. It is one function used for both collision and rendering, so never render terrain from anything else
 - `src/components/lab/` is the UI: panels, uPlot charts, and the R3F scene. MuJoCo runs through the official `@mujoco/mujoco` WASM bindings.
 - `src/lib/lab-store.ts`: zustand store (config, result, playback, share links).
-- `tools/` is Python (uv) for offline data baking: `bake_co2.py` (CoolProp) and `bake_robots.py` (meshes, policy weights, reference fixtures).
+- `tools/` is Python (uv) for offline data baking: `bake_co2.py` (CoolProp), `bake_robots.py` (meshes, policy weights, reference fixtures) and `bake_sky.py` (Yale Bright Star Catalogue and NASA Blue Marble into `public/sky/`).
 - `public/robots/` holds the baked robot assets. `public/mujoco/` is copied from node_modules on install (gitignored).
 
 ## Rules

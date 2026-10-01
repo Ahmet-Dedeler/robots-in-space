@@ -11,7 +11,7 @@ const nextConfig: NextConfig = {
     return [
       {
         // Large static assets that never change between deploys of the same data.
-        source: "/(robots|mujoco)/:path*",
+        source: "/(robots|mujoco|sky)/:path*",
         headers: [{ key: "Cache-Control", value: "public, max-age=86400, stale-while-revalidate=604800" }],
       },
     ];

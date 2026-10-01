@@ -13,6 +13,7 @@ Venus is a constant oven. The other three are about **day and night**: a lunar d
 | Mars air | `sim/planets/mars.ts` | Hydrostatic pressure + CO₂ cycle, dust transmission (beam/diffuse), sky IR warming with dust | REMS 730-920 Pa at Gale; Opportunity 2018 storm array output (~3-4%) |
 | Environment object | `sim/planets/world.ts` | Clock, sunlight on the shell, solar power, heaters, RHUs, RTG heat, radiator, hibernation, cold checks, chase-the-Sun | Missions below |
 | Cold limits | `sim/planets/cold.ts` | Min operating / survival temps per part; brittle materials; solar absorptivity; insulation in vacuum | Datasheets (cited in file) |
+| Sky (3D view) | `sim/planets/sky.ts`, `scene/RealSky.tsx` | Real stars (Yale Bright Star Catalogue, 9,096 to V ~6.5, B-V colours) turning about each body's IAU pole; NASA Blue Marble Earth from the Moon, spinning and lit by the true Sun; Phobos and Deimos from their real orbits; Sun disk sized by the current distance | Obliquities from the pole/orbit tables (Mars 25.19°, Moon 1.54°); Phobos 0.21° overhead, rising in the west (`sky.test.ts`) |
 | Ground | `sim/terrain/terrain.ts` | Craters (N(>D) = n1 D⁻², Gault 1970), Golombek-Rapp rocks, Meridiani ripples, planetary curvature | Rock cover within the k values used for Mars landing-site certification |
 
 The mission loop (`mission/run.ts`) talks to a `World`. For Venus that is a pass-through to VIRA, and Venus results are **bit-identical** to before (checked by fingerprinting every Venus vehicle's run; the Venera validation tests still pass).
@@ -44,7 +45,8 @@ Calibrated, not predicted: Yutu-2's radioisotope heater power and insulation (no
 
 - Topographic shadowing at the lunar poles (flat-horizon approximation; ridges are shadowed by distant peaks part of the time).
 - ChaSTE on Chandrayaan-3 measured ~70 °C at the surface near Pragyan; the flat-ground model gives ~0 °C at 69°S noon. Diviner's flat-terrain values agree with the model; ChaSTE likely sat on a Sun-facing slope next to the lander. Slopes aren't modelled.
-- Mars season is fixed over a run (Ls moves ~30° in 60 sols); no CO₂ frost; no dust-cleaning gusts on arrays.
+- Mars season is fixed over a run (Ls moves ~30° in 60 sols); no CO₂ frost; no dust-cleaning gusts on arrays. (The 3D star field does advance with the season, so the stars drift against the Sun at the real rate.)
+- Sky: scenarios have no calendar date, so the Earth's rotation angle and the Phobos/Deimos phases at t = 0 are arbitrary (their motion from there is real). Lunar libration (Earth wobbling ~7° in the sky) and the Moon pole's 18.6-year circle are frozen at J2000. Planets other than Earth (e.g. Earth as a bright evening star from Mars) and the Milky Way's diffuse glow aren't drawn.
 - No Mars entry/descent/landing (Venus descent only). No lunar/Mercury landing burns.
 - Rovers are kinematic in 3D (no MuJoCo wheel-soil contact yet). Wheel sinkage in regolith (Bekker-Wong) would be the next realism step.
 - Thermal cycling fatigue (solder joints over hundreds of day/night cycles) isn't modelled; parts fail on temperature thresholds only.

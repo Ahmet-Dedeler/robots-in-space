@@ -702,7 +702,7 @@ function resample(raw: number[][], nNodes: number, points: number): Series {
     WORLD_CHANNELS.forEach((c, i) => {
       const col = 11 + nNodes + i;
       // Angles and clocks wrap (359° -> 0°, 23 h -> 0 h): don't interpolate across the wrap.
-      const jumps = Math.abs(b[col] - a[col]) > (c === "localHour" ? 12 : 180);
+      const jumps = c !== "clockS" && Math.abs(b[col] - a[col]) > (c === "localHour" ? 12 : 180);
       s.world[c][k] = c === "awake" || jumps ? a[col] : L(col);
     });
   }

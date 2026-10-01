@@ -5,14 +5,17 @@
  * own optics (VenusEnvironment). For the others, from the sim's own Sun:
  *
  * - The Sun sits where the mission clock puts it (elevation/azimuth from
- *   planets/solar.ts, recorded in the run), with its real angular size:
- *   0.53° from the Moon, 0.35° from Mars, up to 1.7° from Mercury.
+ *   planets/solar.ts, recorded in the run), with its real angular size at
+ *   the current distance: 0.53° from the Moon, 0.32-0.39° from Mars over
+ *   its eccentric year, 1.1-1.7° from Mercury between aphelion and perihelion.
  * - Airless worlds: black sky, one hard-edged light source, no haze at any
  *   distance, shadows as black as the sky. Stars show when the Sun is
  *   down (in daylight the ground outshines them, as in every Apollo photo).
  *   The only fill light is sunlight bounced off the ground (albedo ~0.07-0.2).
- * - The Moon's near side has Earth fixed in the sky (it's tidally locked),
- *   lit by the same Sun, so its phase is right by construction.
+ * - Stars are the real catalogue, turning about the body's real pole
+ *   (RealSky.tsx, sim/planets/sky.ts). The Moon's near side has Earth
+ *   fixed in the sky (it's tidally locked), lit by the true Sun direction,
+ *   so its phase is right by construction. Mars gets Phobos and Deimos.
  * - Mars: dust scatters the light into a butterscotch sky, bluish around the
  *   Sun near sunset (forward scattering by ~1.5 µm dust; Lemmon et al. 2004
  *   Pancam sky images). Haze and the beam/diffuse split follow the dust
@@ -23,12 +26,15 @@
  * their order: Mercury > Moon > Mars > Venus surface.
  */
 import { useFrame, useThree } from "@react-three/fiber";
-import { forwardRef, useMemo, useRef } from "react";
+import { useMemo, useRef } from "react";
 import * as THREE from "three";
 import { useLab } from "@/lib/lab-store";
 import { stateAt } from "@/sim/mission/run";
 import { BODIES, siteById } from "@/sim/planets/bodies";
 import { marsTransmission } from "@/sim/planets/mars";
+import { lunarSeasonDeg, skyRotation, sunFromOrbitJ2000, sunFromSeasonJ2000, sunMeanMotionDegS, type Vec3 } from "@/sim/planets/sky";
+import { sunAt, trueAnomaly } from "@/sim/planets/solar";
+import { Earth, MarsMoons, StarField, enuToThree, type SkyState } from "./RealSky";
 import { VenusEnvironment } from "./VenusEnvironment";
 
 const DEG = Math.PI / 180;
@@ -63,6 +69,7 @@ function PlanetSky() {
   const body = BODIES[planet.body];
   const site = siteById(planet.siteId)!;
   const mars = body.atmosphere === "mars";
+  // Mean size; the frame loop rescales the disk with the current distance.
   const sunAngularDeg = 0.533 / body.orbit.aAU;
   const earth = planet.body === "moon" ? earthDirection(site.latDeg, site.lonDeg) : null;
 
@@ -78,6 +85,10 @@ function PlanetSky() {
   const frame = useRef(0);
   const dir = useMemo(() => new THREE.Vector3(), []);
   const skyDay = useMemo(() => new THREE.Color(), []);
+  const sky = useRef<SkyState>({ rot: new THREE.Matrix4(), sun: new THREE.Vector3(0, 1, 0), sunScale: 1, sunElevDeg: 0, t: 0 });
+  const clock = useMemo(() => ({ body, site, lsDeg: planet.lsDeg }), [body, site, planet.lsDeg]);
+  // Where the Sun is along its path at t = 0 (the scenario's season).
+  const season0 = useMemo(() => (body.id === "moon" ? lunarSeasonDeg(site.declinationDeg ?? 0, body) : planet.lsDeg), [body, site, planet.lsDeg]);
 
   useFrame(() => {
     const { result, playback } = useLab.getState();
@@ -99,8 +110,22 @@ function PlanetSky() {
     const rise = site.shadowed ? 0 : THREE.MathUtils.clamp((w.sunElevDeg + sunAngularDeg / 2) / sunAngularDeg, 0, 1);
     const mu = Math.max(0, Math.sin(w.sunElevDeg * DEG));
     const tr = mars ? marsTransmission(planet.dustTau, Math.max(mu, 0.02)) : { direct: 1, diffuse: 0 };
-    const flux = body.orbit.aAU > 0 ? 1 / (body.orbit.aAU * body.orbit.aAU) : 1;
+    // Distance to the Sun right now (Mercury swings 0.31-0.47 AU, Mars 1.38-1.67 AU).
+    const rAU = body.id === "moon" ? 1 : sunAt(clock, w.clockS).distanceAU;
+    const flux = 1 / (rAU * rAU);
     const beam = rise * Math.pow(flux, 0.3) * (mars ? tr.direct : 1);
+
+    // Orient the real sky: the Sun's J2000 direction at this point of the orbit,
+    // and the body's pole, against where the sim puts the Sun locally.
+    let sunJ: Vec3;
+    if (body.id === "mercury") sunJ = sunFromOrbitJ2000("mercury", trueAnomaly((2 * Math.PI * w.clockS) / body.orbit.periodS, body.orbit.e));
+    else sunJ = sunFromSeasonJ2000(body.id, season0 + sunMeanMotionDegS(body) * st.t);
+    const s = sky.current;
+    enuToThree(skyRotation(body.id, site.latDeg, sunJ, w.sunAzDeg, w.sunElevDeg), s.rot);
+    skyDir(w.sunAzDeg, w.sunElevDeg, s.sun);
+    s.sunScale = (3.4 / Math.PI) * Math.pow(flux, 0.3) * (site.shadowed ? 0 : 1);
+    s.sunElevDeg = w.sunElevDeg;
+    s.t = st.t;
 
     skyDir(w.sunAzDeg, Math.max(w.sunElevDeg, -5), dir);
     if (sun.current) {
@@ -112,6 +137,7 @@ function PlanetSky() {
     if (disk.current) {
       disk.current.visible = up && (!mars || planet.dustTau < 6);
       disk.current.position.copy(target).addScaledVector(dir, SKY_DISTANCE);
+      disk.current.scale.setScalar(body.orbit.aAU / rAU);
     }
 
     const albedo = (site.regolith ?? body.regolith).albedo;
@@ -136,8 +162,14 @@ function PlanetSky() {
     } else bg.current?.setRGB(0, 0, 0);
 
     if (stars.current) {
-      stars.current.visible = !up || w.sunElevDeg < 0 || site.shadowed !== undefined;
-      stars.current.position.copy(target);
+      // Night (or permanent shadow). In twilight on Mars the sky glow hides them first.
+      const dark = site.shadowed ? 1 : 1 - THREE.MathUtils.smoothstep(w.sunElevDeg, mars ? -12 : -1, mars ? -4 : 0.5);
+      const u = (stars.current.material as THREE.ShaderMaterial).uniforms;
+      u.uVisible.value = dark;
+      u.uTau.value = mars ? planet.dustTau : 0;
+      stars.current.visible = dark > 0.01;
+      stars.current.matrix.copy(s.rot).setPosition(target);
+      stars.current.matrixWorldNeedsUpdate = true;
     }
     // Earthshine: at lunar night on the near side, Earth is near full and ~50x brighter than a full Moon.
     if (earthshine.current && earth) {
@@ -172,85 +204,10 @@ function PlanetSky() {
         <sphereGeometry args={[SKY_DISTANCE * Math.tan((sunAngularDeg / 2) * DEG) * 1.15, 32, 16]} />
         <meshBasicMaterial color={mars ? "#fff4e0" : "#ffffff"} toneMapped={false} fog={false} />
       </mesh>
-      {earth && <Earth dir={skyDir(earth.azDeg, earth.elDeg)} />}
+      {earth && <Earth dir={skyDir(earth.azDeg, earth.elDeg)} distance={SKY_DISTANCE * 0.9} sky={sky} />}
       {earth && <directionalLight ref={earthshine} color="#9fb8ff" intensity={0} />}
-      <StarField ref={stars} />
+      {mars && <MarsMoons body={body} latDeg={site.latDeg} distance={SKY_DISTANCE * 0.8} sky={sky} />}
+      <StarField ref={stars} radius={SKY_DISTANCE * 1.1} />
     </>
-  );
-}
-
-/**
- * Stars: fixed-size points on a sphere (built-in material, so it works with the
- * logarithmic depth buffer), magnitudes skewed so a few are bright and most faint.
- */
-const StarField = forwardRef<THREE.Points>(function StarField(_, ref) {
-  const geometry = useMemo(() => {
-    const n = 5000;
-    const pos = new Float32Array(n * 3);
-    const col = new Float32Array(n * 3);
-    let seed = 42;
-    const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-    for (let i = 0; i < n; i++) {
-      const z = rnd() * 2 - 1;
-      const a = rnd() * Math.PI * 2;
-      const r = Math.sqrt(1 - z * z);
-      const R = SKY_DISTANCE * 1.1;
-      pos.set([R * r * Math.cos(a), R * z, R * r * Math.sin(a)], i * 3);
-      const b = 0.25 + 0.75 * rnd() ** 6;
-      const warm = rnd();
-      col.set([b * (0.9 + 0.1 * warm), b * 0.95, b * (1.05 - 0.15 * warm)], i * 3);
-    }
-    const g = new THREE.BufferGeometry();
-    g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
-    g.setAttribute("color", new THREE.BufferAttribute(col, 3));
-    return g;
-  }, []);
-  return (
-    <points ref={ref} geometry={geometry} userData={{ noShadow: true }} frustumCulled={false}>
-      <pointsMaterial size={1.6} sizeAttenuation={false} vertexColors fog={false} toneMapped={false} />
-    </points>
-  );
-});
-
-/** Earth from the Moon: 1.9° across, blue with white cloud bands, phase from the real Sun direction. */
-function Earth({ dir }: { dir: THREE.Vector3 }) {
-  const controls = useThree((s) => s.controls) as unknown as { target: THREE.Vector3 } | null;
-  const ref = useRef<THREE.Mesh>(null);
-  const texture = useMemo(() => {
-    const c = document.createElement("canvas");
-    c.width = 256;
-    c.height = 128;
-    const g = c.getContext("2d")!;
-    g.fillStyle = "#1d4f8f";
-    g.fillRect(0, 0, 256, 128);
-    // Continents and clouds, loosely: the point is colour and banding, not a map.
-    let seed = 7;
-    const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-    g.fillStyle = "#5d6b3c";
-    for (let i = 0; i < 14; i++) {
-      g.beginPath();
-      g.ellipse(rnd() * 256, 20 + rnd() * 88, 10 + rnd() * 30, 6 + rnd() * 16, rnd() * 3, 0, Math.PI * 2);
-      g.fill();
-    }
-    g.fillStyle = "rgba(255,255,255,0.75)";
-    for (let i = 0; i < 40; i++) {
-      g.beginPath();
-      g.ellipse(rnd() * 256, rnd() * 128, 8 + rnd() * 26, 2 + rnd() * 5, rnd() * 0.4, 0, Math.PI * 2);
-      g.fill();
-    }
-    g.fillRect(0, 0, 256, 9);
-    g.fillRect(0, 119, 256, 9);
-    const t = new THREE.CanvasTexture(c);
-    t.colorSpace = THREE.SRGBColorSpace;
-    return t;
-  }, []);
-  useFrame(() => {
-    if (ref.current) ref.current.position.copy(controls?.target ?? new THREE.Vector3()).addScaledVector(dir, SKY_DISTANCE * 0.9);
-  });
-  return (
-    <mesh ref={ref} userData={{ noShadow: true }}>
-      <sphereGeometry args={[SKY_DISTANCE * 0.9 * Math.tan(0.95 * DEG), 48, 24]} />
-      <meshStandardMaterial map={texture} roughness={0.9} metalness={0} fog={false} />
-    </mesh>
   );
 }
