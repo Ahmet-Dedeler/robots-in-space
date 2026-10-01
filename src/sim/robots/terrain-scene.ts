@@ -27,7 +27,7 @@ export interface GroundScene {
 export function groundScene({ terrain, half, res }: GroundOptions): GroundScene {
   const n = Math.round((2 * half) / res) + 1;
   const style = terrain.style;
-  const flat = style.plateSize === 0 && style.boulders.density === 0 && style.slopeDeg === 0;
+  const flat = terrain.isFlat;
   const friction = `${style.friction} 0.005 0.0001`;
   if (flat) {
     return {

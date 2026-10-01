@@ -33,10 +33,18 @@
  *   Viking 1 / Gale, ~0.16 at Viking 2 / Pathfinder. Rock height ~ D/2.
  * - Ripples: aeolian bedforms (Meridiani granule ripples, ~1-2 cm high).
  *
+ * Larger craters (to several hundred metres) are added beyond the robot's
+ * patch so the horizon of an airless world looks like one, but never under
+ * the experiment pad: landing sites are picked on intercrater ground.
+ *
+ * Each ground also carries its soil mechanics (soil.ts) and a fidelity label.
+ *
  * h(x, y) is a pure deterministic function in metres (x east, y north, z up),
  * shared by the MuJoCo collision heightfield and the rendered ground.
  */
 import { BODIES, type BodyId } from "../planets/bodies";
+import type { Fidelity } from "../vehicles/types";
+import { SOILS, type SoilId } from "./soil";
 
 export interface TerrainStyle {
   id: string;
@@ -67,12 +75,22 @@ export interface TerrainStyle {
   friction: number;
   /** World this ground belongs to (Venus when absent; `flat` works anywhere). */
   body?: BodyId;
-  /** Crater population: N(>D) = n1 D^-2 per m^2 for D in [dMin, dMax] m; depth/D range. */
-  craters?: { n1: number; dMin: number; dMax: number; depthRatio: readonly [number, number] };
+  /**
+   * Crater population: N(>D) = n1 D^-2 per m^2 for D in [dMin, dMax] m; depth/D range.
+   * farDMax extends the same law to larger craters that are kept off the experiment pad
+   * (they shape the mid-distance ground and the horizon).
+   */
+  craters?: { n1: number; dMin: number; dMax: number; depthRatio: readonly [number, number]; farDMax?: number };
   /** Golombek-Rapp rock abundance k, rocks from dMin to dMax [m]. */
   rocks?: { k: number; dMin: number; dMax: number };
   /** Wind ripples: height [m], wavelength [m], crest direction [deg from east]. */
   ripples?: { height: number; wavelength: number; dirDeg: number };
+  /** Soil mechanics of the fines between the rocks (sinkage, bearing strength). */
+  soil: SoilId;
+  /** How much of this ground is measured vs inferred. */
+  fidelity: Fidelity;
+  /** Where the numbers come from. */
+  sources: string;
 }
 
 export const TERRAINS = {
@@ -91,6 +109,9 @@ export const TERRAINS = {
     boulders: { density: 0, maxWidth: 0, maxHeight: 0 },
     rockColor: [0.2, 0.175, 0.15],
     sedimentColor: [0.07, 0.058, 0.047],
+    soil: "veneraRock",
+    fidelity: "approximation",
+    sources: "Venera 14 panorama (Garvin et al. 1984; Carter et al. 2023). Plate sizes read off the 5 cm notches on the lander ring.",
     friction: 0.75,
   },
   venera13: {
@@ -108,6 +129,9 @@ export const TERRAINS = {
     boulders: { density: 1.5, maxWidth: 0.08, maxHeight: 0.03 },
     rockColor: [0.15, 0.13, 0.11],
     sedimentColor: [0.07, 0.06, 0.05],
+    soil: "veneraSediment",
+    fidelity: "approximation",
+    sources: "Venera 13 panorama and penetrometer (Garvin et al. 1984; Surkov et al. 1984; Carter et al. 2023).",
     friction: 0.65,
   },
   venera9: {
@@ -125,6 +149,9 @@ export const TERRAINS = {
     boulders: { density: 0.55, maxWidth: 0.6, maxHeight: 0.2 },
     rockColor: [0.15, 0.135, 0.12],
     sedimentColor: [0.1, 0.085, 0.07],
+    soil: "veneraRock",
+    fidelity: "approximation",
+    sources: "Venera 9 panorama: 15-20° talus, blocks to 60 x 20 cm (Florensky et al. 1977; Garvin et al. 1984).",
     friction: 0.7,
   },
   flat: {
@@ -142,6 +169,9 @@ export const TERRAINS = {
     boulders: { density: 0, maxWidth: 0, maxHeight: 0 },
     rockColor: [0.15, 0.13, 0.11],
     sedimentColor: [0.1, 0.085, 0.07],
+    soil: "rigid",
+    fidelity: "hypothetical",
+    sources: "Idealised test pad.",
     friction: 0.75,
   },
   // ---- Moon ---------------------------------------------------------------------
@@ -159,11 +189,14 @@ export const TERRAINS = {
     sedimentFill: 0,
     slopeDeg: 0,
     boulders: { density: 0, maxWidth: 0, maxHeight: 0 },
-    craters: { n1: 0.079, dMin: 0.4, dMax: 24, depthRatio: [0.03, 0.2] },
+    craters: { n1: 0.079, dMin: 0.4, dMax: 24, depthRatio: [0.03, 0.2], farDMax: 600 },
     rocks: { k: 0.01, dMin: 0.04, dMax: 0.8 },
     // Mare regolith reflects ~7-10% (Apollo photometry); slightly brownish grey.
     rockColor: [0.13, 0.125, 0.115],
     sedimentColor: [0.085, 0.08, 0.074],
+    soil: "lunarRegolith",
+    fidelity: "calibrated",
+    sources: "Craters: lunar equilibrium N(>D) = 10^-1.1 D^-2 (Gault 1970; Trask 1966). Rocks: ~1% cover (Surveyor / Apollo; Diviner rock abundance 0.5% for >1 m, Bandfield et al. 2011).",
     friction: 0.8,
   },
   lunarHighlands: {
@@ -180,10 +213,84 @@ export const TERRAINS = {
     sedimentFill: 0,
     slopeDeg: 4,
     boulders: { density: 0, maxWidth: 0, maxHeight: 0 },
-    craters: { n1: 0.079, dMin: 0.4, dMax: 30, depthRatio: [0.03, 0.2] },
+    craters: { n1: 0.079, dMin: 0.4, dMax: 30, depthRatio: [0.03, 0.2], farDMax: 600 },
     rocks: { k: 0.02, dMin: 0.04, dMax: 1.2 },
     rockColor: [0.26, 0.25, 0.24],
     sedimentColor: [0.19, 0.185, 0.175],
+    soil: "lunarRegolith",
+    fidelity: "calibrated",
+    sources: "Craters as mare (equilibrium). Diviner: highlands 0.4% cover by >1 m rocks (Bandfield et al. 2011); albedo Apollo 16.",
+    friction: 0.8,
+  },
+  lunarPolar: {
+    id: "lunarPolar",
+    name: "Lunar south pole ridge (Artemis)",
+    note: "Sunlit highland ridge near Shackleton: a steady 6° slope, cratered regolith and scattered metre-size boulders.",
+    body: "moon",
+    plateSize: 0,
+    plateThickness: [0, 0],
+    plateCoverage: 0,
+    layerChance: 0,
+    crackWidth: 0,
+    tiltDeg: 0,
+    sedimentFill: 0,
+    slopeDeg: 6,
+    // LROC NAC: 1800-3000 boulders >=0.65 m per km^2 on the Shackleton rim / connecting ridge.
+    // With this size law ~60% of blocks are >=0.65 m wide, so 0.004 /m^2 -> ~2400 /km^2.
+    boulders: { density: 0.004, maxWidth: 2.5, maxHeight: 1.1 },
+    craters: { n1: 0.079, dMin: 0.4, dMax: 30, depthRatio: [0.03, 0.2], farDMax: 600 },
+    rocks: { k: 0.015, dMin: 0.04, dMax: 0.8 },
+    rockColor: [0.27, 0.26, 0.25],
+    sedimentColor: [0.2, 0.195, 0.185],
+    soil: "lunarRegolith",
+    fidelity: "approximation",
+    sources: "Slopes <5-10° at 30 m baselines on Artemis candidate sites (LOLA); boulder counts from LROC NAC (LPSC 2022 #1312, 2024 #1898).",
+    friction: 0.8,
+  },
+  lunarShadowed: {
+    id: "lunarShadowed",
+    name: "Shadowed crater floor (Shackleton)",
+    note: "Never-lit floor: smooth, very porous regolith (~70% voids) that may hide ice a few dm down. Feet and wheels sink more.",
+    body: "moon",
+    plateSize: 0,
+    plateThickness: [0, 0],
+    plateCoverage: 0,
+    layerChance: 0,
+    crackWidth: 0,
+    tiltDeg: 0,
+    sedimentFill: 0,
+    slopeDeg: 2,
+    boulders: { density: 0, maxWidth: 0, maxHeight: 0 },
+    craters: { n1: 0.05, dMin: 0.4, dMax: 24, depthRatio: [0.03, 0.15], farDMax: 600 },
+    rocks: { k: 0.008, dMin: 0.04, dMax: 0.6 },
+    rockColor: [0.24, 0.235, 0.225],
+    sedimentColor: [0.17, 0.165, 0.158],
+    soil: "lunarFluffy",
+    fidelity: "hypothetical",
+    sources: "LAMP far-UV porosity ~70% (Gladstone et al. 2012); LOLA: Shackleton floor smooth at metre scale (Zuber et al. 2012). No lander yet.",
+    friction: 0.7,
+  },
+  lunarBlocky: {
+    id: "lunarBlocky",
+    name: "Fresh crater ejecta (Surveyor 7, Tycho)",
+    note: "Young ejecta blanket: angular blocks from fist- to car-size everywhere. The roughest ground landers have seen on the Moon.",
+    body: "moon",
+    plateSize: 0,
+    plateThickness: [0, 0],
+    plateCoverage: 0,
+    layerChance: 0,
+    crackWidth: 0,
+    tiltDeg: 0,
+    sedimentFill: 0,
+    slopeDeg: 3,
+    boulders: { density: 0.02, maxWidth: 2, maxHeight: 0.9 },
+    craters: { n1: 0.03, dMin: 0.4, dMax: 20, depthRatio: [0.05, 0.2], farDMax: 600 },
+    rocks: { k: 0.12, dMin: 0.04, dMax: 1 },
+    rockColor: [0.25, 0.24, 0.23],
+    sedimentColor: [0.17, 0.165, 0.155],
+    soil: "lunarRegolith",
+    fidelity: "approximation",
+    sources: "Surveyor 7 was far rockier than the maria (Shoemaker & Morris 1969); k set near Viking 2's 0.16. Young surfaces have not reached crater equilibrium, so fewer small craters.",
     friction: 0.8,
   },
   // ---- Mars -----------------------------------------------------------------------
@@ -201,11 +308,14 @@ export const TERRAINS = {
     sedimentFill: 0.55,
     slopeDeg: 0,
     boulders: { density: 0, maxWidth: 0, maxHeight: 0 },
-    craters: { n1: 0.004, dMin: 0.8, dMax: 24, depthRatio: [0.03, 0.12] },
+    craters: { n1: 0.004, dMin: 0.8, dMax: 24, depthRatio: [0.03, 0.12], farDMax: 300 },
     rocks: { k: 0.07, dMin: 0.04, dMax: 1 },
     // Reflectance of Martian dust ~0.35 red / 0.2 green / 0.08 blue; rocks are darker basalt under dust.
     rockColor: [0.2, 0.12, 0.075],
     sedimentColor: [0.32, 0.18, 0.09],
+    soil: "marsSoil",
+    fidelity: "calibrated",
+    sources: "Rock cover k ~0.07 (Golombek & Rapp 1997 model; MSL site certification). Soil: Viking / MER trenches.",
     friction: 0.7,
   },
   marsRocky: {
@@ -222,10 +332,13 @@ export const TERRAINS = {
     sedimentFill: 0,
     slopeDeg: 0,
     boulders: { density: 0, maxWidth: 0, maxHeight: 0 },
-    craters: { n1: 0.003, dMin: 0.8, dMax: 20, depthRatio: [0.03, 0.1] },
+    craters: { n1: 0.003, dMin: 0.8, dMax: 20, depthRatio: [0.03, 0.1], farDMax: 300 },
     rocks: { k: 0.16, dMin: 0.04, dMax: 1.2 },
     rockColor: [0.17, 0.11, 0.075],
     sedimentColor: [0.33, 0.19, 0.095],
+    soil: "marsSoil",
+    fidelity: "calibrated",
+    sources: "Viking 2 rock cover k ~0.16 (Golombek & Rapp 1997); Jezero floor similar (Mars 2020 site certification).",
     friction: 0.7,
   },
   marsMeridiani: {
@@ -242,12 +355,62 @@ export const TERRAINS = {
     sedimentFill: 0.9,
     slopeDeg: 0,
     boulders: { density: 0, maxWidth: 0, maxHeight: 0 },
-    craters: { n1: 0.002, dMin: 1, dMax: 20, depthRatio: [0.05, 0.15] },
+    craters: { n1: 0.002, dMin: 1, dMax: 20, depthRatio: [0.05, 0.15], farDMax: 300 },
     rocks: { k: 0.008, dMin: 0.03, dMax: 0.4 },
     ripples: { height: 0.02, wavelength: 3, dirDeg: 30 },
     rockColor: [0.3, 0.2, 0.12],
     sedimentColor: [0.16, 0.1, 0.065],
+    soil: "marsSoil",
+    fidelity: "calibrated",
+    sources: "Opportunity: k <0.01, granule ripples 1-2 cm over sulfate outcrop (Golombek et al. 2005; Sullivan et al. 2011).",
     friction: 0.65,
+  },
+  marsDust: {
+    id: "marsDust",
+    name: "Dust-mantled volcano (Olympus, Tharsis)",
+    note: "Bright, fluffy airfall dust at least centimetres deep, almost no rocks. Weak ground: feet sink, wheels dig.",
+    body: "mars",
+    plateSize: 0,
+    plateThickness: [0, 0],
+    plateCoverage: 0,
+    layerChance: 0,
+    crackWidth: 0,
+    tiltDeg: 0,
+    sedimentFill: 0,
+    slopeDeg: 4,
+    boulders: { density: 0, maxWidth: 0, maxHeight: 0 },
+    craters: { n1: 0.002, dMin: 1, dMax: 20, depthRatio: [0.02, 0.08], farDMax: 300 },
+    rocks: { k: 0.005, dMin: 0.04, dMax: 0.5 },
+    rockColor: [0.26, 0.15, 0.09],
+    sedimentColor: [0.4, 0.24, 0.13],
+    soil: "marsDrift",
+    fidelity: "hypothetical",
+    sources: "Thermal inertia 40-120 SI over Tharsis means fine dust, cm to m thick (Putzig et al. 2005). Dust strength from Viking drift material. No lander has been.",
+    friction: 0.55,
+  },
+  marsSoftSand: {
+    id: "marsSoftSand",
+    name: "Soft sand ripples (Purgatory, Troy)",
+    note: "Loose, cohesionless sand drifts 20-30 cm tall: the ground that bogged Opportunity for 5 weeks and ended Spirit's driving.",
+    body: "mars",
+    plateSize: 1.6,
+    plateThickness: [0.01, 0.03],
+    plateCoverage: 0.15,
+    layerChance: 0.3,
+    crackWidth: 0.05,
+    tiltDeg: 1,
+    sedimentFill: 0.9,
+    slopeDeg: 0,
+    boulders: { density: 0, maxWidth: 0, maxHeight: 0 },
+    craters: { n1: 0.002, dMin: 1, dMax: 20, depthRatio: [0.05, 0.15], farDMax: 300 },
+    rocks: { k: 0.005, dMin: 0.03, dMax: 0.3 },
+    ripples: { height: 0.25, wavelength: 4, dirDeg: 15 },
+    rockColor: [0.3, 0.2, 0.12],
+    sedimentColor: [0.3, 0.18, 0.1],
+    soil: "marsLooseSand",
+    fidelity: "approximation",
+    sources: "Purgatory ripple ~30 cm tall (Opportunity sol 446); Spirit embedded at Troy, 2009. Soil: Sullivan et al. 2011 (cohesionless end).",
+    friction: 0.6,
   },
   // ---- Mercury ------------------------------------------------------------------
   mercuryPlains: {
@@ -264,11 +427,37 @@ export const TERRAINS = {
     sedimentFill: 0,
     slopeDeg: 0,
     boulders: { density: 0, maxWidth: 0, maxHeight: 0 },
-    craters: { n1: 0.079, dMin: 0.4, dMax: 24, depthRatio: [0.03, 0.2] },
+    craters: { n1: 0.079, dMin: 0.4, dMax: 24, depthRatio: [0.03, 0.2], farDMax: 600 },
     rocks: { k: 0.01, dMin: 0.04, dMax: 0.8 },
     rockColor: [0.1, 0.1, 0.1],
     sedimentColor: [0.07, 0.07, 0.072],
+    soil: "mercuryRegolith",
+    fidelity: "hypothetical",
+    sources: "No lander yet. Lunar crater/rock statistics assumed; reflectance from MESSENGER MDIS (Denevi et al.).",
     friction: 0.8,
+  },
+  mercuryShadowed: {
+    id: "mercuryShadowed",
+    name: "Shadowed polar crater (Prokofiev)",
+    note: "Dark, porous lag 10-20 cm thick over water ice, in permanent shadow. Hypothetical: nothing has landed there.",
+    body: "mercury",
+    plateSize: 0,
+    plateThickness: [0, 0],
+    plateCoverage: 0,
+    layerChance: 0,
+    crackWidth: 0,
+    tiltDeg: 0,
+    sedimentFill: 0,
+    slopeDeg: 2,
+    boulders: { density: 0, maxWidth: 0, maxHeight: 0 },
+    craters: { n1: 0.05, dMin: 0.4, dMax: 24, depthRatio: [0.03, 0.15], farDMax: 600 },
+    rocks: { k: 0.008, dMin: 0.04, dMax: 0.6 },
+    rockColor: [0.07, 0.07, 0.072],
+    sedimentColor: [0.045, 0.045, 0.048],
+    soil: "lunarFluffy",
+    fidelity: "hypothetical",
+    sources: "MESSENGER: radar-bright ice under a 10-20 cm dark (organic-rich) lag (Paige et al. 2013; Neumann et al. 2013). Soil assumed like lunar polar regolith.",
+    friction: 0.7,
   },
 } as const satisfies Record<string, TerrainStyle>;
 
@@ -326,7 +515,12 @@ export interface TerrainSample {
   shade: number;
   /** Distance to the nearest plate edge [m] (for weathering / crack darkening). */
   edge: number;
+  /** Height of the soil surface alone (no plates, rocks or boulders) [m]. h - ground = obstacle height. */
+  ground: number;
 }
+
+/** Clear radius around the experiment pad that big (far-field) craters keep off [m]. */
+const PAD_CLEAR = 12;
 
 export class Terrain {
   readonly style: TerrainStyle;
@@ -342,10 +536,27 @@ export class Terrain {
     this.boulderCell = style.boulders.density > 0 ? Math.max(style.boulders.maxWidth * 1.4, 0.25) : 0;
     this.rockBins = style.rocks ? rockBins(style.rocks) : [];
     this.craterBins = style.craters ? craterBins(style.craters) : [];
+    const c = style.craters;
+    this.farCraterBins = c?.farDMax && c.farDMax > c.dMax ? craterBins({ n1: c.n1, dMin: c.dMax, dMax: c.farDMax }) : [];
   }
 
   private readonly rockBins: Bin[];
   private readonly craterBins: Bin[];
+  private readonly farCraterBins: Bin[];
+
+  /**
+   * True when the ground is a perfect plane (the physics can use a plane geom).
+   * Craters, rocks and ripples all count as relief.
+   */
+  get isFlat(): boolean {
+    const s = this.style;
+    return s.plateSize === 0 && s.boulders.density === 0 && s.slopeDeg === 0 && !s.craters && !s.rocks && !s.ripples;
+  }
+
+  /** Soil mechanics of this ground. */
+  get soil() {
+    return SOILS[this.style.soil];
+  }
 
   /**
    * Large-scale ground: the local site slope (Venera 9's talus is a local
@@ -357,7 +568,8 @@ export class Terrain {
     const r = Math.hypot(x, y);
     // Smoothly saturating slope: ~slope*x near the site, levelling off ~40 m out.
     const local = this.slope * 40 * Math.tanh(x / 40);
-    const small = 0.04 * (fbm(x / 3, y / 3, this.seed + 5, 3) - 0.5);
+    // The test pad is truly flat near the robot (its physics is a plane).
+    const small = this.style.id === "flat" ? 0 : 0.04 * (fbm(x / 3, y / 3, this.seed + 5, 3) - 0.5);
     const swell = 6 * (fbm(x / 400, y / 400, this.seed + 41, 4) - 0.5) * smoothstep(30, 300, r);
     // Small worlds curve away fast: from 1.7 m up, the lunar horizon is only ~2.4 km off
     // (sqrt(2 R h)). Negligible under the robot (<0.1 mm over the physics patch).
@@ -370,7 +582,7 @@ export class Terrain {
     const base = this.base(x, y);
     const tMean = 0.5 * (s.plateThickness[0] + s.plateThickness[1]);
     // Sediment: fine grains (mm) over a slightly wavy fill level.
-    let sediment = s.sedimentFill * tMean + 0.006 * (fbm(x / 0.5, y / 0.5, this.seed + 9, 2) - 0.5);
+    let sediment = s.id === "flat" ? 0 : s.sedimentFill * tMean + 0.006 * (fbm(x / 0.5, y / 0.5, this.seed + 9, 2) - 0.5);
     if (s.id === "venera9") sediment += 0.02 * (fbm(x / 0.15, y / 0.15, this.seed + 21, 2) - 0.5); // coarse gravel
     if (s.ripples) {
       const a = (s.ripples.dirDeg * Math.PI) / 180;
@@ -379,6 +591,7 @@ export class Terrain {
       const f = u - Math.floor(u);
       sediment += s.ripples.height * (f < 0.7 ? f / 0.7 : (1 - f) / 0.3) * (0.6 + 0.4 * fbm(x / 9, y / 9, this.seed + 62, 2));
     }
+    const groundH = sediment;
     let h = sediment;
     let kind: 0 | 1 | 2 = 0;
     let shade = fbm(x * 3, y * 3, this.seed + 3, 2);
@@ -470,7 +683,36 @@ export class Terrain {
       }
     }
 
-    return { h: h + base + (this.craterBins.length ? this.crater(x, y) : 0), kind, shade, edge };
+    const dz = base + (this.craterBins.length ? this.crater(x, y, this.craterBins, false) : 0) + (this.farCraterBins.length ? this.crater(x, y, this.farCraterBins, true) : 0);
+    return { h: h + dz, kind, shade, edge, ground: groundH + dz };
+  }
+
+  /** Obstacle height above the soil surface at (x, y) [m]: rocks, boulders, plate edges. */
+  relief(x: number, y: number): number {
+    const s = this.sample(x, y);
+    return Math.max(0, s.h - s.ground);
+  }
+
+  /** Slope of the soil surface (ignoring rocks) over a baseline of 2*d metres [deg]. */
+  slopeDeg(x: number, y: number, d = 0.25): number {
+    const g = (u: number, v: number) => this.sample(u, v).ground;
+    const gx = (g(x + d, y) - g(x - d, y)) / (2 * d);
+    const gy = (g(x, y + d) - g(x, y - d)) / (2 * d);
+    return (Math.atan(Math.hypot(gx, gy)) * 180) / Math.PI;
+  }
+
+  /**
+   * Height for the far horizon mesh [m]: regional relief plus the craters big
+   * enough to show at tens-of-metres resolution (rocks and small pits are
+   * below the mesh spacing).
+   */
+  farHeight(x: number, y: number, minD = 40): number {
+    const s = this.style;
+    const tMean = 0.5 * (s.plateThickness[0] + s.plateThickness[1]);
+    let h = this.base(x, y) + s.sedimentFill * tMean;
+    if (this.craterBins.length) h += this.crater(x, y, this.craterBins, false, minD);
+    if (this.farCraterBins.length) h += this.crater(x, y, this.farCraterBins, true, minD);
+    return h;
   }
 
   /** Golombek-Rapp rocks, one size bin at a time. Height above the local ground [m]. */
@@ -512,16 +754,21 @@ export class Terrain {
     return best;
   }
 
-  /** Sum of simple-crater profiles (bowl + rim + ejecta falloff) [m]. */
-  private crater(x: number, y: number): number {
+  /**
+   * Sum of simple-crater profiles (bowl + rim + ejecta falloff) [m].
+   * `far` bins use their own seeds and skip craters whose ejecta would reach the pad;
+   * `minD` drops craters too small to resolve (far mesh).
+   */
+  private crater(x: number, y: number, bins: Bin[], far: boolean, minD = 0): number {
     const c = this.style.craters!;
     let dz = 0;
-    for (let bi = 0; bi < this.craterBins.length; bi++) {
-      const bin = this.craterBins[bi];
+    for (let bi = 0; bi < bins.length; bi++) {
+      const bin = bins[bi];
+      if (bin.dMax < minD) continue;
       const cs = bin.cell;
       const ci = Math.floor(x / cs);
       const cj = Math.floor(y / cs);
-      const sd = this.seed + 301 + bi * 17;
+      const sd = this.seed + (far ? 701 : 301) + bi * 17;
       for (let di = -1; di <= 1; di++) {
         for (let dj = -1; dj <= 1; dj++) {
           const i = ci + di;
@@ -532,8 +779,10 @@ export class Terrain {
             const R = D / 2;
             const cx = (i + hash2(i, j, sd + m * 5 + 2)) * cs;
             const cy = (j + hash2(i, j, sd + m * 5 + 3)) * cs;
+            if (D < minD) continue;
             const r = Math.hypot(x - cx, y - cy);
             if (r > 1.6 * R) continue;
+            if (far && Math.hypot(cx, cy) < 1.6 * R + PAD_CLEAR) continue;
             // Most craters are old and shallow; a few are fresh bowls.
             const fresh = hash2(i, j, sd + m * 5 + 4) ** 2.5;
             const dr = c.depthRatio[0] + (c.depthRatio[1] - c.depthRatio[0]) * fresh;
@@ -611,6 +860,8 @@ export class Terrain {
 
 interface Bin {
   cell: number;
+  /** Largest feature in the bin [m]. */
+  dMax: number;
   /** Candidates per cell and the chance each one exists. */
   perCell: number;
   p: number;
@@ -630,7 +881,7 @@ function makeBins(dMin: number, dMax: number, count: (d1: number, d2: number) =>
     const cell = Math.max(reach * d2, 0.05);
     const expected = n * cell * cell;
     const perCell = Math.max(1, Math.ceil(expected / 0.8));
-    bins.push({ cell, perCell, p: expected / perCell, sample: (u) => sample(d1, d2, u) });
+    bins.push({ cell, dMax: d2, perCell, p: expected / perCell, sample: (u) => sample(d1, d2, u) });
   }
   return bins;
 }

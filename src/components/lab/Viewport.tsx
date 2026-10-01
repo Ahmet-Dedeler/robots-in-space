@@ -12,6 +12,7 @@ import { fmtBar, fmtC, fmtClock } from "./format";
 import { HumanoidView } from "./scene/HumanoidView";
 import { LanderView } from "./scene/LanderView";
 import { TerrainView } from "./scene/TerrainView";
+import { GroundHud, TripMarker } from "./scene/GroundOverlay";
 import { useTerrain } from "./scene/useScene";
 import { RoverView } from "./scene/RoverView";
 import { WorldEnvironment } from "./scene/WorldEnvironment";
@@ -114,6 +115,7 @@ export default function Viewport() {
         <PlaybackDriver />
         <WorldEnvironment />
         <Ground />
+        <TripMarker />
         {mech.kind === "humanoid" ? (
           <HumanoidView robot={mech.robot} finish={mech.finish} onReady={onReady} />
         ) : mech.kind === "wheeled" ? (
@@ -130,6 +132,7 @@ export default function Viewport() {
         </EffectComposer>
       </Canvas>
       <Hud />
+      <GroundHud humanoid={humanoid} />
       {humanoid && status === null && (
         <div className="absolute inset-0 grid place-items-center">
           <div className="rounded-lg bg-black/40 px-4 py-2 text-xs text-stone-200 backdrop-blur">Loading MuJoCo + robot model…</div>

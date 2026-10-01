@@ -12,10 +12,28 @@
  *
  * Colours are albedo-level (basalt is dark, ~0.1-0.2 reflectance); the orange
  * look comes from the light, as in the Venera 13/14 colour panoramas.
+ *
+ * Hazard map (toggle in the viewport): the same meshes, unlit, coloured by
+ * obstacle height above the soil and by slope (survey.ts bands), over a
+ * hillshade and a 1 m grid. It's how a rover team reads a site, and it works
+ * in the dark (shadowed crater floors) and under Venus's flat orange light,
+ * where 3-5 cm plate edges are nearly invisible.
  */
 import { useMemo } from "react";
 import * as THREE from "three";
+import { useGroundView } from "@/lib/ground-view";
+import { hazardClass } from "@/sim/terrain/survey";
 import type { Terrain } from "@/sim/terrain/terrain";
+
+/** Hazard colours (linear RGB) for classes 1-3; class 0 stays grey. Matches the legend in the viewport. */
+export const HAZARD_RGB: [number, number, number][] = [
+  [0, 0, 0],
+  [0.95, 0.72, 0.05],
+  [0.98, 0.32, 0.02],
+  [0.85, 0.02, 0.03],
+];
+/** Hillshade light: from the north-west, 45° up (cartographic convention). In three coords (z south). */
+const SHADE_DIR = new THREE.Vector3(-1, Math.SQRT2, -1).normalize();
 
 interface Level {
   half: number;
@@ -25,10 +43,18 @@ interface Level {
   detail: boolean;
 }
 
-function buildLevel(t: Terrain, { half, step, hole, detail }: Level): THREE.BufferGeometry {
+interface LevelMeshes {
+  natural: THREE.BufferGeometry;
+  hazard: THREE.BufferGeometry;
+}
+
+function buildLevel(t: Terrain, { half, step, hole, detail }: Level): LevelMeshes {
   const n = Math.round((2 * half) / step) + 1;
   const pos = new Float32Array(n * n * 3);
   const col = new Float32Array(n * n * 3);
+  // Obstacle height above the soil and the soil height itself, for the hazard map.
+  const relief = new Float32Array(n * n);
+  const soil = new Float32Array(n * n);
   // World-space UVs (1 unit = 1 m) for the cm-scale detail texture.
   const uv = new Float32Array(n * n * 2);
   const s = t.style;
@@ -43,6 +69,8 @@ function buildLevel(t: Terrain, { half, step, hole, detail }: Level): THREE.Buff
       if (detail) {
         const smp = t.sample(x, y);
         h = smp.h;
+        relief[i] = Math.max(0, smp.h - smp.ground);
+        soil[i] = smp.ground;
         if (smp.kind === 0) {
           rgb = s.sedimentColor;
           k = 0.8 + 0.4 * smp.shade;
@@ -54,7 +82,9 @@ function buildLevel(t: Terrain, { half, step, hole, detail }: Level): THREE.Buff
         }
         if (smp.kind === 0 && smp.edge < s.crackWidth / 2 + 0.004) k *= 0.6;
       } else {
-        h = t.base(x, y) + s.sedimentFill * 0.5 * (s.plateThickness[0] + s.plateThickness[1]);
+        // Horizon: regional relief plus the craters big enough to show at this spacing.
+        h = t.farHeight(x, y, 2 * step);
+        soil[i] = h;
         rgb = [(s.rockColor[0] + s.sedimentColor[0]) / 2, (s.rockColor[1] + s.sedimentColor[1]) / 2, (s.rockColor[2] + s.sedimentColor[2]) / 2];
         k = 0.85 + 0.3 * (Math.sin(x * 0.013) * Math.sin(y * 0.017) * 0.5 + 0.5);
       }
@@ -94,7 +124,48 @@ function buildLevel(t: Terrain, { half, step, hole, detail }: Level): THREE.Buff
   g.setIndex(new THREE.BufferAttribute(idx, 1));
   g.computeVertexNormals();
   g.computeBoundingSphere();
-  return g;
+
+  // Hazard colours: hillshade grey, tinted by hazard class, with a 1 m grid near the robot (10 m further out).
+  const hz = new Float32Array(n * n * 3);
+  const nrm = g.attributes.normal as THREE.BufferAttribute;
+  const k = Math.max(1, Math.round(0.25 / step)); // slope baseline ~0.5 m
+  const grid = step < 0.1 ? 1 : 10;
+  for (let r = 0; r < n; r++) {
+    for (let c = 0; c < n; c++) {
+      const i = r * n + c;
+      const shade = Math.max(0, nrm.getX(i) * SHADE_DIR.x + nrm.getY(i) * SHADE_DIR.y + nrm.getZ(i) * SHADE_DIR.z);
+      let rgb = [0.1 + 0.45 * shade, 0.1 + 0.45 * shade, 0.11 + 0.45 * shade];
+      if (detail) {
+        const c0 = Math.max(0, c - k);
+        const c1 = Math.min(n - 1, c + k);
+        const r0 = Math.max(0, r - k);
+        const r1 = Math.min(n - 1, r + k);
+        const gx = (soil[r * n + c1] - soil[r * n + c0]) / ((c1 - c0) * step);
+        const gy = (soil[r1 * n + c] - soil[r0 * n + c]) / ((r1 - r0) * step);
+        const cls = hazardClass(relief[i], (Math.atan(Math.hypot(gx, gy)) * 180) / Math.PI);
+        if (cls > 0) {
+          const tint = HAZARD_RGB[cls];
+          const lit = 0.55 + 0.6 * shade;
+          rgb = [tint[0] * lit, tint[1] * lit, tint[2] * lit];
+        }
+      }
+      // Grid lines: one vertex wide where a coordinate crosses a whole metre (or 10 m).
+      const x = -half + c * step;
+      const y = -half + r * step;
+      const onLine = (v: number) => Math.abs(v / grid - Math.round(v / grid)) * grid < step * 0.5;
+      if (step <= 0.2 && (onLine(x) || onLine(y))) rgb = rgb.map((v) => v * 0.55 + 0.12);
+      hz[i * 3] = rgb[0];
+      hz[i * 3 + 1] = rgb[1];
+      hz[i * 3 + 2] = rgb[2];
+    }
+  }
+  const hazard = new THREE.BufferGeometry();
+  hazard.setAttribute("position", g.attributes.position);
+  hazard.setAttribute("normal", g.attributes.normal);
+  hazard.setAttribute("color", new THREE.BufferAttribute(hz, 3));
+  hazard.setIndex(g.index);
+  hazard.boundingSphere = g.boundingSphere;
+  return { natural: g, hazard };
 }
 
 /**
@@ -163,10 +234,13 @@ export function TerrainView({ terrain }: { terrain: Terrain }) {
     () => new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.96, metalness: 0, map: detailTexture() }),
     [],
   );
+  // Unlit so the map reads the same in a shadowed crater, at lunar noon and under Venus's orange overcast.
+  const hazardMaterial = useMemo(() => new THREE.MeshBasicMaterial({ vertexColors: true, toneMapped: false }), []);
+  const hazards = useGroundView((s) => s.hazards);
   return (
     <group>
-      {levels.map((g, i) => (
-        <mesh key={i} geometry={g} material={material} receiveShadow={i === 0} />
+      {levels.map((l, i) => (
+        <mesh key={i} geometry={hazards ? l.hazard : l.natural} material={hazards ? hazardMaterial : material} receiveShadow={i === 0 && !hazards} />
       ))}
     </group>
   );

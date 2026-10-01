@@ -32,8 +32,10 @@ export function PlanetModelNotes() {
         electronics are stored to ~-55 °C; grease stiffens; rubber turns glassy near -60 °C; BCC steels go brittle).
       </li>
       <li>
-        Ground: crater populations from the lunar equilibrium size-frequency law (Gault 1970), rocks from the Golombek-Rapp abundance model used to
-        certify Mars landing sites, ripples at Meridiani. Small worlds curve away: the lunar horizon is ~2.4 km off.
+        Ground: crater populations from the lunar equilibrium size-frequency law (Gault 1970), out to the horizon, rocks from the Golombek-Rapp
+        abundance model used to certify Mars landing sites, LROC boulder counts at the south pole, ripples at Meridiani. Soil mechanics (Bekker
+        sinkage, Terzaghi bearing capacity) from the Apollo LRV studies, Viking and MER trenches. Small worlds curve away: the lunar horizon is ~2.4
+        km off. See the Ground tab and the hazard map.
       </li>
       <li>
         Checked against history: Pragyan dies in its first lunar night, Yutu-2 wakes up after each one, Curiosity runs through the 2018 dust storm,

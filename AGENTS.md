@@ -10,7 +10,19 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Robots in Space Simulator
 
-Browser sandbox for physics experiments on other worlds: drop a robot, rover, lander or custom build onto Venus, the Moon, Mars or Mercury (or descend through Venus's atmosphere from 62 km) and see what fails and when. Not a textbook: every screen is an experiment with a verdict. Venus specifics are in `docs/plan.md`, the other worlds in `docs/planets.md`.
+Browser sandbox for physics experiments on other worlds: drop a robot, rover, lander or custom build onto Venus, the Moon, Mars or Mercury (or descend through Venus's atmosphere from 62 km) and see what fails and when. Not a textbook: every screen is an experiment with a verdict. Venus specifics are in `docs/plan.md`, the other worlds in `docs/planets.md`, the ground (terrain, rocks, soil, hazards) in `docs/geology.md`.
+
+## Goal
+
+Simulate reality as closely as we can, so people can plan for it. Before anyone sends a humanoid, a rover, a construction or mining machine, or a floating base to another world, they should be able to try it here first: which design survives, which style of robot works on which ground, what kills it first and when. It's for understanding reality and being prepared, and also for experimenting freely (custom builds, "what if" materials, robots dropped where they were never meant to go).
+
+What that means in practice:
+
+- **Science is the only compass.** Atmosphere, gravity, sunlight, ground, soil, materials, robots: every model is the best public data we can find (mission measurements, datasheets, papers, official specs) and says where it comes from. When nothing is measured, we make an explicit, labelled guess. Never invent precision.
+- **What you see is what the physics sees.** Rendered ground, collision ground and survey numbers come from one function. If a robot trips, the user must be able to see on what (hazard map, fall marker), or be told it fell on open ground.
+- **Validate against history.** Real missions are the test suite (Venera 13 descent and survival, Pragyan's first night, Yutu-2 waking up, Opportunity in the 2018 storm, Apollo bootprints and LRV ruts). A model that can't reproduce what happened isn't trusted for what hasn't.
+- **Every result is an experiment with a verdict and an honest fidelity label** (validated / calibrated / approximation / hypothetical), so a "this works" from a guess never looks like one from data.
+- **Keep improving realism** wherever it's the weakest link (today: wheel-soil contact for rovers, thermal-cycling fatigue, topographic shadowing at the poles; see the "Known gaps" sections in `docs/`).
 
 ## Layout
 
@@ -23,9 +35,11 @@ Browser sandbox for physics experiments on other worlds: drop a robot, rover, la
   - `planets/`: Moon, Mars, Mercury. `world.ts` is the environment the mission loop talks to (Venus is a pass-through to VIRA); `regolith.ts` ground temperatures, `solar.ts` the Sun, `mars.ts` Mars air/dust, `cold.ts` cold limits
   - `robots/policy.ts`: Unitree walking policy (LSTM + MLP) ported to TS
   - `robots/robot-world.ts`, `robots/skidsteer-world.ts`: MuJoCo worlds (terrain heightfield, buoyancy, spec mass, plastic hinges), shared by the browser and Node tests
-  - `terrain/terrain.ts`: the Venera-derived ground. It is one function used for both collision and rendering, so never render terrain from anything else
+  - `terrain/terrain.ts`: the ground of every world (Venera-derived plates for Venus; craters, rocks, boulders, ripples elsewhere). One function used for collision, rendering and the hazard survey, so never render terrain from anything else. `Terrain.isFlat` decides plane vs heightfield; anything with relief must be a heightfield
+  - `terrain/soil.ts`: soil mechanics per ground (Bekker sinkage, Terzaghi bearing capacity) with sources; `terrain/survey.ts`: obstacle/slope survey, hazard classes, foot and wheel trafficability
+  - `robots/trip.ts`: fall diagnosis (caught a rock / slope / lost balance on open ground / too weak), shared by the 3D view and the walking calibration
 - `src/components/lab/` is the UI: panels, uPlot charts, and the R3F scene. MuJoCo runs through the official `@mujoco/mujoco` WASM bindings.
-- `src/lib/lab-store.ts`: zustand store (config, result, playback, share links).
+- `src/lib/lab-store.ts`: zustand store (config, result, playback, share links). `src/lib/ground-view.ts`: view-only state (hazard map toggle, last fall).
 - `tools/` is Python (uv) for offline data baking: `bake_co2.py` (CoolProp) and `bake_robots.py` (meshes, policy weights, reference fixtures).
 - `public/robots/` holds the baked robot assets. `public/mujoco/` is copied from node_modules on install (gitignored).
 
@@ -37,6 +51,8 @@ Browser sandbox for physics experiments on other worlds: drop a robot, rover, la
 - Keep Venus bit-identical when touching `planets/`: the `World` for Venus must not change any Venus number.
 - Mutable engine objects (MuJoCo model/data, three.js objects touched per frame) live in refs, not React state or memo. The React Compiler lint rules enforce this.
 - Colors for chart series are fixed per part role (`ROLE_COLOR`). Never cycle them.
+- Venus ground heights must stay bit-identical too unless a change is deliberate (Venera calibration depends on them). Off-Venus, big horizon craters must never reach the experiment pad.
+- After changing terrain, robots or masses, rerun `scripts/calibrate-walking.ts`: it also records *why* each robot falls, which the mission timeline reports.
 - Running logs and findings go in `docs/`, not here.
 
 ## Commands

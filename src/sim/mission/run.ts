@@ -26,7 +26,7 @@ import { MATERIALS, curveAt, yieldFraction } from "../materials/materials";
 import { WORLD_CHANNELS, createWorld, type PlanetScenario, type WorldChannel } from "../planets/world";
 import { ThermalNetwork } from "../thermal/network";
 import walking from "../data/walking.json";
-import type { TerrainId } from "../terrain/terrain";
+import { TERRAINS, type TerrainId, type TerrainStyle } from "../terrain/terrain";
 import { buildThermalModel } from "../vehicles/thermal-model";
 import { displacedVolumeM3 } from "../vehicles/volume";
 import type { VehicleBuild } from "../vehicles/types";
@@ -343,9 +343,7 @@ export function runExperiment(build: VehicleBuild, scenario: Scenario): RunResul
         : !frameOk
           ? "frame yielded"
           : tripped
-            ? scenario.planet
-              ? `tripped on the craters and rocks (typical after ~${gait!.meanTripS!.toFixed(0)} s; its walking policy is blind and was trained on flat ground under Earth gravity)`
-              : `tripped on the ${scenario.ground === "venera9" ? "boulder slope" : "rock plates"} (typical after ~${gait!.meanTripS!.toFixed(0)} s; its walking policy is blind and was trained on flat ground)`
+            ? tripReason(gait!, scenario.ground, !!scenario.planet)
             : `motor torque down to ${(torque * 100).toFixed(0)}%, below the ${(walkMin * 100).toFixed(0)}% it needs on this ground`;
       emit(t, "fail", "Robot falls", `Can no longer walk: ${why}.`);
     }
@@ -538,6 +536,25 @@ interface Gait {
   minTorque: number | null;
   meanTripS: number | null;
   metersPerS: number;
+  /** Most common fall cause in the calibration runs (robots/trip.ts). */
+  tripCause?: "obstacle" | "slope" | "balance" | "weak" | null;
+}
+
+/** Why a healthy robot falls on this ground, from the calibration's fall diagnosis. */
+function tripReason(gait: Gait, ground: TerrainId, offVenus: boolean): string {
+  const after = `typical after ~${gait.meanTripS!.toFixed(0)} s`;
+  const blind = offVenus ? "its walking policy is blind and was trained on flat ground under Earth gravity" : "its walking policy is blind and was trained on flat ground";
+  const t = TERRAINS[ground] as TerrainStyle;
+  switch (gait.tripCause) {
+    case "balance":
+      return `lost its balance on open ground, not on a rock (${after}; ${offVenus ? "a gait trained under Earth gravity runs away in this gravity" : "the gait itself goes unstable here"})`;
+    case "slope":
+      return `lost its footing on the slope (${after}; ${blind})`;
+    default: {
+      const what = t.slopeDeg > 10 && t.boulders.density > 0 ? "boulder slope" : t.craters ? "rocks and crater rims" : t.plateSize > 0 ? "rock plates" : "rocks";
+      return `caught a foot on the ${what} (${after}; ${blind})`;
+    }
+  }
 }
 
 /** Walking capability from scripts/calibrate-walking.ts; falls back to the same robot's body. */

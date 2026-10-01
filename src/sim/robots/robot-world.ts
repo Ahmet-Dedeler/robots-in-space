@@ -150,7 +150,7 @@ export class RobotWorld {
     const half = options.terrainHalf ?? 8;
     const res = options.terrainRes ?? 0.02;
     const n = Math.round((2 * half) / res) + 1;
-    const flat = options.terrain.style.plateSize === 0 && options.terrain.style.boulders.density === 0 && options.terrain.style.slopeDeg === 0;
+    const flat = options.terrain.isFlat;
     const grid = flat ? null : options.terrain.grid(0, 0, half, n);
     let lo = 0;
     let hi = 0;
