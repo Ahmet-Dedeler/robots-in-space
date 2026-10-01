@@ -30,6 +30,18 @@
  *   (a hoverslam). On Venus, if the engines can't even hold the weight, it
  *   burns everything on the way down to soften the hit.
  *
+ * Aerodynamics (aero.ts): drag and lift follow the angle of attack and Mach
+ * number from the stage's geometry (crossflow model), so a belly-first
+ * Starship and a tail-first booster fall at different speeds for physical
+ * reasons, not tuned drag areas. Attitude is commanded, not integrated:
+ * entry and skydive angles of attack are presets, the flip takes FLIP_S.
+ *
+ * Entry heating (tps.ts): Sutton-Graves flux on the windward side, the base
+ * and the lee, conducted through the tiles (or blanket) into the skin. Tiles
+ * past their limit fail; skin past its structural limit means the tanks
+ * rupture (outcome "burned"). Boosters without a heat shield fly an entry
+ * burn first, as Falcon 9 does on Earth.
+ *
  * Fidelity: approximation. Real landings fly smarter (and longer) guidance;
  * propellant margins here are a bit optimistic (Apollo 11 landed with ~45 s
  * of fuel; this model leaves more).
@@ -38,9 +50,11 @@ import { atmosphere } from "../env/atmosphere";
 import { BODIES, gravityAt, type BodyId } from "../planets/bodies";
 import { marsPressure } from "../planets/mars";
 import type { VehicleBuild } from "../vehicles/types";
+import { aeroAreas, soundSpeed } from "./aero";
 import { ENGINES, engineModel } from "./engines";
+import { STRUCTURE_LIMIT_K, TILES, Wall, stagnationFlux } from "./tps";
 
-export type FlightOutcome = "landed" | "hard" | "crashed" | "crushed" | "floating";
+export type FlightOutcome = "landed" | "hard" | "crashed" | "crushed" | "burned" | "floating";
 
 export interface FlightEvent {
   t: number;
@@ -69,6 +83,23 @@ export interface Flight {
   pressurePa: Float64Array;
   /** 1 once the tanks have buckled. */
   crushed: Float64Array;
+  /** Angle between the nose axis and the oncoming flow [deg]: 180 = engines first (boosters), ~60 = Starship's entry, 90 = belly flop. */
+  aoaDeg: Float64Array;
+  mach: Float64Array;
+  /** Dynamic pressure 1/2 rho v^2 [Pa]. */
+  qPa: Float64Array;
+  /** Hottest incident heat flux on any surface [W/m^2]. */
+  heatWm2: Float64Array;
+  /** Hottest outer surface (tile face or bare skin) [K]. */
+  surfaceK: Float64Array;
+  /** Hottest structural skin (behind the tiles, if any) [K]. */
+  skinK: Float64Array;
+  /** Non-gravitational acceleration (drag + lift + thrust) in Earth g. */
+  gLoad: Float64Array;
+  /** Vehicle mass (dry + propellant) [kg]. */
+  massKg: Float64Array;
+  /** Peaks over the flight. */
+  peaks: { qPa: number; heatWm2: number; surfaceK: number; skinK: number; gLoad: number; mach: number };
   events: FlightEvent[];
   /** Reached the ground at this time (null: never did). */
   touchdownS: number | null;
@@ -95,6 +126,8 @@ interface Air {
   p: number;
   rho: number;
   g: number;
+  /** Air temperature [K] (0 on airless worlds). */
+  T: number;
 }
 
 /** Mars: same hydrostatic model as the surface sim (mars.ts), isothermal ~210 K. R_CO2 = 188.9 J/kg/K. */
@@ -102,14 +135,14 @@ function airAt(sc: FlightScenario, h: number): Air {
   const z = sc.elevationM + h;
   if (sc.body === "venus") {
     const a = atmosphere(z);
-    return { p: a.pressurePa, rho: a.densityKgM3, g: a.gravity };
+    return { p: a.pressurePa, rho: a.densityKgM3, g: a.gravity, T: a.temperatureK };
   }
   const g = gravityAt(BODIES[sc.body], z);
   if (sc.body === "mars") {
     const p = marsPressure(z, sc.lsDeg ?? 150);
-    return { p, rho: p / (188.9 * 210), g };
+    return { p, rho: p / (188.9 * 210), g, T: 210 };
   }
-  return { p: 0, rho: 0, g };
+  return { p: 0, rho: 0, g, T: 0 };
 }
 
 const FLIP_S = 6;
@@ -149,10 +182,11 @@ export function flyLanding(b: VehicleBuild, sc: FlightScenario): Flight {
   let vz = 0;
   let crushed = false;
   let crushedS: number | null = null;
-  let phase: "coast" | "flip" | "braking" | "terminal" = "coast";
+  let phase: "entryBurn" | "coast" | "flip" | "braking" | "terminal" = "coast";
   let flipT = 0;
   let aRef = 0;
-  let pitch = P.cdABellyM2 ? 90 : 0;
+  const belly = P.aero.belly;
+  let pitch = belly ? 90 : 0;
   let engineOn = false;
   let outOfPropAt: number | null = null;
   let cantPushWarned = false;
@@ -165,13 +199,39 @@ export function flyLanding(b: VehicleBuild, sc: FlightScenario): Flight {
   const events: FlightEvent[] = [];
   const emit = (severity: FlightEvent["severity"], title: string, detail?: string) => events.push({ t, severity, title, detail });
 
-  const volume = () => (crushed || P.tanks.flood ? solidV() : P.tanks.volumeM3);
-  const cdA = () => {
-    if (!P.cdABellyM2) return P.cdAM2;
-    if (phase === "coast") return P.cdABellyM2;
-    if (phase === "flip") return P.cdABellyM2 + (P.cdAM2 - P.cdABellyM2) * Math.min(1, flipT / FLIP_S);
-    return P.cdAM2;
+  const volume = () => (crushed || burned || P.tanks.flood ? solidV() : P.tanks.volumeM3);
+  /** Angle between body axis and flow, aero.ts convention (0 engines first, 180 nose first). */
+  let alpha = belly ? 180 - belly.skydiveAoADeg : 0;
+  const alphaFor = (mach: number) => {
+    if (!belly) return 0;
+    if (phase === "coast") {
+      // Entry angle of attack above Mach 3, the skydive below Mach 0.8, blended in between.
+      const k = Math.min(1, Math.max(0, (mach - 0.8) / 2.2));
+      return 180 - (belly.skydiveAoADeg + (belly.entryAoADeg - belly.skydiveAoADeg) * k);
+    }
+    // The flip swings it from belly-first to engines-first.
+    if (phase === "flip") return (180 - belly.skydiveAoADeg) * Math.max(0, 1 - flipT / FLIP_S);
+    return 0;
   };
+  /** Mach number, attitude and aero areas at this speed and air. */
+  const aeroAt = (speed: number, air: Air) => {
+    const mach = air.T > 0 ? speed / soundSpeed(air.T) : 0;
+    alpha = alphaFor(mach);
+    return { mach, ...aeroAreas(P.aero, alpha, mach) };
+  };
+
+  // Heated walls: windward side (and nose), engine base, lee side.
+  const T0 = airAt(sc, h).T || 250;
+  const walls = { windward: new Wall(P.tps.windward, T0), base: new Wall(P.tps.base, T0), lee: new Wall(P.tps.lee, T0) };
+  const wallLabel = { windward: belly ? "Windward tiles" : "Windward skin", base: "Engine base", lee: "Lee-side skin" } as const;
+  const tileWarned = new Set<string>();
+  const tileFailed = new Set<string>();
+  let burned = false;
+  let burnedS: number | null = null;
+  let burnAltKm = "";
+  let cur = { mach: 0, q: 0, heat: 0, g: 0 };
+  const peaks = { qPa: 0, heatWm2: 0, surfaceK: T0, skinK: T0, gLoad: 0, mach: 0 };
+  const prop0 = prop;
   /** Full thrust of the landing engines, the lowest one engine can throttle to, and one engine at full, here [N]. */
   const limits = (pa: number) => ({ max: P.landingEngines * eng.thrust(1, pa), min: eng.thrust(E.minThrottle, pa), one: eng.thrust(1, pa) });
   const vacuumMax = P.landingEngines * eng.thrust(1, 0);
@@ -214,7 +274,9 @@ export function flyLanding(b: VehicleBuild, sc: FlightScenario): Flight {
   } else if (air0.rho > 0) {
     const m = dry + prop;
     const net = Math.max(0, m * air0.g - air0.rho * air0.g * volume());
-    vz = -Math.sqrt((2 * net) / (air0.rho * cdA()));
+    // Terminal velocity; Mach (and so drag) depends on it, so iterate.
+    vz = -50;
+    for (let i = 0; i < 6; i++) vz = -Math.sqrt((2 * net) / (air0.rho * aeroAt(-vz, air0).cdA));
   }
 
   // ---- Samples -----------------------------------------------------------------
@@ -225,7 +287,29 @@ export function flyLanding(b: VehicleBuild, sc: FlightScenario): Flight {
   const rec = (force = false) => {
     if (!force && t - lastRec < 0.5) return;
     lastRec = t;
-    rows.push([t, Math.max(0, h), x, vx, vz, vacuumMax > 0 ? lastT / vacuumMax : 0, lastLit, pitch, prop, airAt(sc, Math.max(0, h)).p, crushed ? 1 : 0]);
+    const surfK = Math.max(walls.windward.surfaceK, walls.base.surfaceK, walls.lee.surfaceK);
+    const skinK = Math.max(walls.windward.skinK, walls.base.skinK, walls.lee.skinK);
+    rows.push([
+      t,
+      Math.max(0, h),
+      x,
+      vx,
+      vz,
+      vacuumMax > 0 ? lastT / vacuumMax : 0,
+      lastLit,
+      pitch,
+      prop,
+      airAt(sc, Math.max(0, h)).p,
+      crushed ? 1 : 0,
+      180 - alpha,
+      cur.mach,
+      cur.q,
+      cur.heat,
+      surfK,
+      skinK,
+      cur.g,
+      dry + prop,
+    ]);
   };
 
   // Opening narrative.
@@ -233,9 +317,9 @@ export function flyLanding(b: VehicleBuild, sc: FlightScenario): Flight {
     const a = airAt(sc, h);
     const surf = airAt(sc, 0);
     const speed0 = Math.hypot(vx, vz);
-    const way = P.cdABellyM2 ? "belly-first" : "engines-first";
+    const way = belly ? "belly-first" : "engines-first";
     const where =
-      sc.body === "venus"
+      sc.body === "venus" && !entry
         ? `Entry is over: falling ${way} at ${speed0.toFixed(0)} m/s through ${(a.p / 1e5).toFixed(2)} bar air, ${sc.fromKm} km up. The ground is at ${(surf.p / 1e5).toFixed(0)} bar.`
         : entry
           ? `Hits the top of the atmosphere ${sc.fromKm} km up at ${(speed0 / 1000).toFixed(1)} km/s, ${way}. The air at the ground is only ${(surf.p / 100).toFixed(1)} mbar: drag takes most of the speed, the engines the rest.`
@@ -243,8 +327,23 @@ export function flyLanding(b: VehicleBuild, sc: FlightScenario): Flight {
             ? `Falling ${way} at ${speed0.toFixed(0)} m/s, ${sc.fromKm} km up, in ${(a.p / 100).toFixed(1)} mbar air.`
             : `In orbit ${sc.fromKm} km up, moving sideways at ${(vx / 1000).toFixed(2)} km/s. No air to brake against: every m/s has to come off with propellant.`;
     emit("info", "Descent begins", where);
-    if (!P.heatShield && (entry || sc.body === "venus"))
-      emit("warn", "No heat shield", `This stage was never built for entry from orbit. Entry heating isn't modelled, so this run assumes it got through anyway.`);
+    if (entry) {
+      const w = P.tps.windward;
+      const shield = w.tile ? `${TILES[w.tile.id].name}, ${w.tile.thicknessMm} mm, over ${w.skin.thicknessMm} mm of ${w.skin.material === "ss316" ? "stainless steel" : "aluminium"}` : null;
+      emit(
+        shield ? "info" : "warn",
+        shield ? "Heat shield" : "No heat shield",
+        shield
+          ? `${shield} on the windward side; the lee side is bare. Re-entry heats the windward face to its radiative balance while the tiles keep the steel behind them cool.`
+          : `Bare ${w.skin.thicknessMm} mm ${w.skin.material === "ss316" ? "steel" : "aluminium"} flanks${P.tps.base.tile ? ` and a ${TILES[P.tps.base.tile.id].name.toLowerCase()} over the engines` : ""}. ${P.entryBurn ? "This stage was built to come back from a few km/s, not from orbit. It fires its engines first (an entry burn) to cut the speed the air has to take off." : "It was never meant to meet air at all."}`,
+      );
+      if (speed0 > 6000)
+        emit("warn", "Radiative heating not modelled", `At ${(speed0 / 1000).toFixed(1)} km/s the shock layer in CO₂ glows and radiates onto the vehicle (Tauber & Sutton 1991). Only convective heating is computed, so this run is optimistic.`);
+    }
+    if (entry && P.entryBurn) {
+      phase = "entryBurn";
+      emit("info", "Entry burn", `${P.landingEngines} × ${E.name} fire against the motion to slow from ${(speed0 / 1000).toFixed(2)} km/s toward ${(P.entryBurn.targetMs / 1000).toFixed(1)} km/s, spending at most ${Math.round(P.entryBurn.maxShare * 100)}% of the propellant.`);
+    }
     if (sc.body === "venus") {
       const surfFrac = eng.thrust(1, surf.p) / eng.thrust(1, 101_325);
       if (eng.thrust(1, surf.p) <= 0)
@@ -268,18 +367,24 @@ export function flyLanding(b: VehicleBuild, sc: FlightScenario): Flight {
     const left = prop;
     let outcome: FlightOutcome;
     let summary: string;
-    let destroyedS: number | null = crushedS;
+    let destroyedS: number | null = crushedS ?? burnedS;
     if (tdS === null) {
-      outcome = crushed ? "crushed" : "floating";
+      outcome = crushed ? "crushed" : burned ? "burned" : "floating";
       summary = crushed
         ? `Tanks crushed ${crushAltKm} km up.`
-        : airless
+        : burned
+          ? `Burned through ${burnAltKm} km up.`
+          : airless
           ? "Still in orbit: no propellant to brake with."
           : `Never reached the ground: floating ${(h / 1000).toFixed(1)} km up.`;
     } else if (crushed) {
       outcome = "crushed";
       summary = `Tanks crushed ${crushAltKm} km up; the wreck hit the ground at ${speed.toFixed(speed < 10 ? 1 : 0)} m/s.`;
       emit("fail", "Wreck hits the ground", `${speed.toFixed(1)} m/s, ${fmtMin(tdS)} after the start.`);
+    } else if (burned) {
+      outcome = "burned";
+      summary = `Burned through ${burnAltKm} km up during entry; the wreck hit the ground at ${speed.toFixed(0)} m/s.`;
+      emit("fail", "Wreck hits the ground", `${speed.toFixed(0)} m/s, ${fmtMin(tdS)} after the start.`);
     } else if (speed <= P.legs.ratedMs) {
       outcome = "landed";
       summary = `Landed at ${speed.toFixed(1)} m/s with ${fmtKg(left)} of propellant left.`;
@@ -301,7 +406,7 @@ export function flyLanding(b: VehicleBuild, sc: FlightScenario): Flight {
       );
     }
     rec(true);
-    return pack(rows, events, { touchdownS: tdS, touchdownMs: tdS === null ? 0 : speed, outcome, destroyedS, propellantLeftKg: left, summary });
+    return pack(rows, events, { touchdownS: tdS, touchdownMs: tdS === null ? 0 : speed, outcome, destroyedS, propellantLeftKg: left, summary, peaks });
   };
 
   const MAX_T = 6 * 3600;
@@ -311,13 +416,15 @@ export function flyLanding(b: VehicleBuild, sc: FlightScenario): Flight {
     const r = body.radiusM + sc.elevationM + h;
     const gEff = air.g - (vx * vx) / r - (air.rho * air.g * volume()) / m;
     const speed = Math.hypot(vx, vz);
-    const D = 0.5 * air.rho * speed * speed * cdA();
+    const ae = aeroAt(speed, air);
+    const qDyn = 0.5 * air.rho * speed * speed;
+    const D = qDyn * ae.cdA;
     let Dx = speed > 0 ? (-D * vx) / speed : 0;
     let Dz = speed > 0 ? (-D * vz) / speed : 0;
     // Lifting entry (belly-first): bank the lift up or down to sink at ~60 m/s while the air bleeds off the speed.
-    if (entry && phase === "coast" && P.liftToDrag && speed > 0) {
+    if (entry && phase === "coast" && belly && speed > 0) {
       const share = Math.max(-1, Math.min(1, (-60 - vz) / 60));
-      const Lf = P.liftToDrag * D * share;
+      const Lf = qDyn * ae.clA * share;
       Dx += (-Lf * vz) / speed;
       Dz += (Lf * Math.abs(vx)) / speed;
     }
@@ -335,6 +442,47 @@ export function flyLanding(b: VehicleBuild, sc: FlightScenario): Flight {
       );
     }
 
+    // Entry heating (tps.ts). The step size is the flight's: the walls sub-step for stability.
+    const stepDt = h < 300 || phase === "flip" ? 0.02 : 0.1;
+    let qMax = 0;
+    // A wreck that has burned through isn't tracked further (its skin is gone).
+    if (air.rho > 0 && !burned && !(speed < 200 && peaks.surfaceK < 500)) {
+      const a = (alpha * Math.PI) / 180;
+      const radius = P.aero.diameterM / 2;
+      const qSphere = stagnationFlux(air.rho, speed, radius);
+      const qSide = (qSphere / Math.SQRT2) * Math.pow(Math.max(0, Math.sin(a)), 1.5);
+      const qNose = qSphere * Math.max(0, -Math.cos(a));
+      const qBase = stagnationFlux(air.rho, speed, P.aero.diameterM) * Math.max(0, Math.cos(a));
+      const qWind = Math.max(qSide, qNose);
+      const q = { windward: qWind, base: qBase, lee: P.tps.leeShare * Math.max(qWind, qBase) };
+      qMax = Math.max(qWind, qBase);
+      for (const k of ["windward", "base", "lee"] as const) {
+        const w = walls[k];
+        w.step(q[k], air.T, stepDt);
+        const tile = w.spec.tile && TILES[w.spec.tile.id];
+        if (tile && w.tiled && w.surfaceK > tile.reuseK && !tileWarned.has(k)) {
+          tileWarned.add(k);
+          emit("warn", `${wallLabel[k]} past their reuse limit`, `${fmtC(w.surfaceK)} on the ${tile.name.toLowerCase()} (reusable to ${fmtC(tile.reuseK)}), ${(q[k] / 1000).toFixed(0)} kW/m² coming in at ${(speed / 1000).toFixed(2)} km/s.`);
+        }
+        if (tile && w.tileFailed && !tileFailed.has(k)) {
+          tileFailed.add(k);
+          emit("fail", `${wallLabel[k]} failing`, `Past ${fmtC(tile.limitK)} the silica shrinks and the coating cracks: tiles come off and the skin behind takes the heat directly.`);
+        }
+        const lim = STRUCTURE_LIMIT_K[w.spec.skin.material];
+        if (lim && !burned && !crushed && w.skinK >= lim) {
+          burned = true;
+          burnedS = t;
+          engineOn = false;
+          burnAltKm = (h / 1000).toFixed(1);
+          emit(
+            "fatal",
+            "Burn-through",
+            `${wallLabel[k]}: the ${w.spec.skin.thicknessMm} mm ${w.spec.skin.material === "ss316" ? "steel" : "aluminium"} skin reached ${fmtC(w.skinK)} and lost most of its strength. The pressurised tanks behind it split open and the stage breaks up, ${burnAltKm} km up at ${(speed / 1000).toFixed(2)} km/s.`,
+          );
+        }
+      }
+    }
+
     const dragAcc = D / m;
     if (dragAcc > peakDrag) peakDrag = dragAcc;
     else if (peakDrag > 1 && dragAcc < 0.8 * peakDrag) pastPeakDrag = true;
@@ -348,12 +496,17 @@ export function flyLanding(b: VehicleBuild, sc: FlightScenario): Flight {
       engineOn = false;
       emit("fail", "Nobody flying", "The flight computer is dead: no engine commands, no landing burn. It falls.");
     }
-    const live = !crushed && prop > 0 && !brainDead;
+    const live = !crushed && !burned && prop > 0 && !brainDead;
+
+    if (phase === "entryBurn" && (!live || speed <= P.entryBurn!.targetMs || prop <= prop0 * (1 - P.entryBurn!.maxShare))) {
+      phase = "coast";
+      if (live) emit("info", "Entry burn done", `${(h / 1000).toFixed(0)} km up, down to ${(speed / 1000).toFixed(2)} km/s with ${fmtKg(prop)} of propellant left for landing.`);
+    }
 
     // ---- Phase changes ---------------------------------------------------------
     if (live && phase === "coast" && vz < 0) {
       // Distance fallen while flipping (belly-first craft hold their speed with the engines during the flip).
-      const flipFall = P.cdABellyM2 ? Math.abs(vz) * FLIP_S : 0;
+      const flipFall = belly ? Math.abs(vz) * FLIP_S : 0;
       const hEff = Math.max(1, h - flipFall);
       const weak = aMax <= 0.3;
       const burnS = prop / (P.landingEngines * eng.mdotFull);
@@ -368,7 +521,7 @@ export function flyLanding(b: VehicleBuild, sc: FlightScenario): Flight {
             emit("fail", "Engines can't push", `At ${(air.p / 1e5).toFixed(0)} bar the air outside is at the chamber pressure: no exhaust gets out, no thrust.`);
           }
         } else {
-          phase = P.cdABellyM2 ? "flip" : speed > GATE_SPEED ? "braking" : "terminal";
+          phase = belly ? "flip" : speed > GATE_SPEED ? "braking" : "terminal";
           aRef = refDecel(aMin, aMax);
           if (weak && !weakWarned) {
             weakWarned = true;
@@ -380,8 +533,8 @@ export function flyLanding(b: VehicleBuild, sc: FlightScenario): Flight {
           }
           emit(
             "info",
-            P.cdABellyM2 ? "Flip and landing burn" : "Landing burn",
-            `${h >= 1000 ? `${(h / 1000).toFixed(1)} km` : `${h.toFixed(0)} m`} up at ${speed.toFixed(0)} m/s.${P.cdABellyM2 ? " Engines light and swing the ship from belly-first to tail-down." : ""}`,
+            belly ? "Flip and landing burn" : "Landing burn",
+            `${h >= 1000 ? `${(h / 1000).toFixed(1)} km` : `${h.toFixed(0)} m`} up at ${speed.toFixed(0)} m/s.${belly ? " Engines light and swing the ship from belly-first to tail-down." : ""}`,
           );
         }
       }
@@ -408,7 +561,10 @@ export function flyLanding(b: VehicleBuild, sc: FlightScenario): Flight {
       mdot = d.mdot;
       lit = d.lit;
     };
-    if (live && phase === "flip") {
+    if (live && phase === "entryBurn") {
+      // Retrograde at full thrust, high above the dense air (Falcon 9's entry burn, done on Earth at ~70 km).
+      apply((-L.max * vx) / Math.max(speed, 1e-6), (-L.max * vz) / Math.max(speed, 1e-6));
+    } else if (live && phase === "flip") {
       // Hold the descent speed while the ship swings upright.
       apply(0, Math.min(L.max, Math.max(L.min, m * gEff - Dz)));
     } else if (live && phase === "braking" && airless) {
@@ -438,13 +594,34 @@ export function flyLanding(b: VehicleBuild, sc: FlightScenario): Flight {
     }
     lastT = Math.hypot(Tx, Tz);
     lastLit = lit;
-    // Attitude follows the thrust (or relaxes upright), turning at most ~20°/s like a real stage (display only).
-    const pitchWant = lastT > 0 ? (Math.atan2(Tx, Tz) * 180) / Math.PI : phase === "coast" && P.cdABellyM2 ? 90 : phase === "coast" ? pitch : 0;
+    // Attitude: along the thrust when burning; coasting, the commanded angle of attack off the flow,
+    // belly down (nose rotated up). Turns at most ~20°/s like a real stage.
+    const coastPitch = () => {
+      if (speed < 1) return belly ? 90 : 0;
+      const a = (alpha * Math.PI) / 180;
+      const nx = -vx / speed;
+      const nz = -vz / speed;
+      const up = Math.sin(a) * nx + Math.cos(a) * nz >= -Math.sin(a) * nx + Math.cos(a) * nz ? 1 : -1;
+      const ox = nx * Math.cos(up * a) - nz * Math.sin(up * a);
+      const oz = nx * Math.sin(up * a) + nz * Math.cos(up * a);
+      return (Math.atan2(ox, oz) * 180) / Math.PI;
+    };
+    const pitchWant = lastT > 0 ? (Math.atan2(Tx, Tz) * 180) / Math.PI : phase === "coast" || phase === "flip" ? coastPitch() : 0;
     const turn = (phase === "flip" ? 90 / FLIP_S : 20) * (h < 300 ? 0.02 : 0.1);
     pitch += Math.max(-turn, Math.min(turn, pitchWant - pitch));
 
+    // Felt acceleration (everything but gravity: thrust, drag, lift, buoyancy) and the peaks.
+    const buoy = air.rho * air.g * volume();
+    cur = { mach: ae.mach, q: qDyn, heat: qMax, g: Math.hypot(Tx + Dx, Tz + Dz + buoy) / m / EARTH_G };
+    peaks.qPa = Math.max(peaks.qPa, qDyn);
+    peaks.heatWm2 = Math.max(peaks.heatWm2, qMax);
+    peaks.gLoad = Math.max(peaks.gLoad, cur.g);
+    peaks.mach = Math.max(peaks.mach, ae.mach);
+    peaks.surfaceK = Math.max(peaks.surfaceK, walls.windward.surfaceK, walls.base.surfaceK, walls.lee.surfaceK);
+    peaks.skinK = Math.max(peaks.skinK, walls.windward.skinK, walls.base.skinK, walls.lee.skinK);
+
     // ---- Integrate (semi-implicit Euler) -----------------------------------------
-    const dt = h < 300 || phase === "flip" ? 0.02 : 0.1;
+    const dt = stepDt;
     vx += ((Tx + Dx) / m) * dt;
     vz += ((Tz + Dz) / m - gEff) * dt;
     x += vx * dt;
@@ -484,13 +661,15 @@ function altitudeWherePressure(sc: FlightScenario, pa: number): string {
   return "100";
 }
 
+const EARTH_G = 9.80665;
+const fmtC = (k: number) => `${Math.round(k - 273.15)} °C`;
 const fmtKg = (kg: number) => (kg >= 1000 ? `${(kg / 1000).toFixed(kg >= 10_000 ? 0 : 1)} t` : `${Math.round(kg)} kg`);
 const fmtMin = (s: number) => (s < 120 ? `${s.toFixed(0)} s` : `${(s / 60).toFixed(1)} min`);
 
 function pack(
   rows: number[][],
   events: FlightEvent[],
-  rest: Pick<Flight, "touchdownS" | "touchdownMs" | "outcome" | "destroyedS" | "propellantLeftKg" | "summary">,
+  rest: Pick<Flight, "touchdownS" | "touchdownMs" | "outcome" | "destroyedS" | "propellantLeftKg" | "summary" | "peaks">,
 ): Flight {
   const col = (i: number) => Float64Array.from(rows, (r) => r[i]);
   return {
@@ -505,6 +684,14 @@ function pack(
     propellantKg: col(8),
     pressurePa: col(9),
     crushed: col(10),
+    aoaDeg: col(11),
+    mach: col(12),
+    qPa: col(13),
+    heatWm2: col(14),
+    surfaceK: col(15),
+    skinK: col(16),
+    gLoad: col(17),
+    massKg: col(18),
     events,
     ...rest,
   };
@@ -536,6 +723,14 @@ export function flightAt(f: Flight, t: number) {
     propellantKg: L(f.propellantKg),
     pressurePa: L(f.pressurePa),
     crushed: f.crushed[lo] > 0.5,
+    aoaDeg: L(f.aoaDeg),
+    mach: L(f.mach),
+    qPa: L(f.qPa),
+    heatWm2: L(f.heatWm2),
+    surfaceK: L(f.surfaceK),
+    skinK: L(f.skinK),
+    gLoad: L(f.gLoad),
+    massKg: L(f.massKg),
     ended: t >= f.t[n - 1],
   };
 }

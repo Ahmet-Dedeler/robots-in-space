@@ -1,0 +1,1097 @@
+{
+  "_doc": "Sources for every 3D vehicle model. See tools/bake_models.py for the fields and docs/models.md for the license and accuracy notes. Rig nodes: x forward, z up in Blender before export; pivots are source-object origins ('origin'), subtree bbox centres ('center'), or lab-frame metres ('at'). 'hide' matches an object's own name; 'hideTree' drops whole subtrees.",
+  "msl": {
+    "title": "Curiosity rover (MSL)",
+    "source": {
+      "kind": "url",
+      "url": "https://raw.githubusercontent.com/nasa/NASA-3D-Resources/master/3D Models/Curiosity Rover (MSL)/Curiosity Rover (MSL) (Clean).blend"
+    },
+    "page": "https://github.com/nasa/NASA-3D-Resources/tree/master/3D%20Models/Curiosity%20Rover%20(MSL)",
+    "credit": "NASA/JPL-Caltech",
+    "license": "NASA media usage guidelines (not copyrighted)",
+    "forward": "-Y",
+    "up": "Z",
+    "scale": {
+      "axis": "z",
+      "m": 2.2,
+      "ref": "NASA MSL fact sheet: 2.2 m tall at the mast top"
+    },
+    "check": [
+      {
+        "what": "width",
+        "axis": "y",
+        "m": 2.8,
+        "ref": "NASA: 2.8 m wide",
+        "tol": 6
+      },
+      {
+        "what": "length incl. stowed arm",
+        "axis": "x",
+        "m": 3.0,
+        "ref": "NASA: ~3 m long (body); the arm turret sticks out further",
+        "tol": 35
+      }
+    ],
+    "hide": [
+      "*_p",
+      "MAHLI_cam",
+      "MastCam_L",
+      "MastCam_R",
+      "NavCam_top_*",
+      "HazCam_*",
+      "MARDI",
+      "shadow_arm"
+    ],
+    "maxTris": 60000,
+    "rig": [
+      {
+        "name": "rocker_L",
+        "objects": [
+          "suspension_arm_F_L_p",
+          "suspension_arm_B_L_p"
+        ],
+        "pivot": {
+          "origin": "suspension_arm_F_L_p"
+        }
+      },
+      {
+        "name": "bogie_L",
+        "parent": "rocker_L",
+        "objects": [
+          "Cube_03_p"
+        ],
+        "pivot": {
+          "origin": "Cube_03_p"
+        }
+      },
+      {
+        "name": "steer_L0",
+        "parent": "rocker_L",
+        "objects": [
+          "suspension_steer_F_L"
+        ],
+        "pivot": {
+          "origin": "suspension_steer_F_L"
+        }
+      },
+      {
+        "name": "wheel_L0",
+        "parent": "steer_L0",
+        "objects": [
+          "wheel_01_L"
+        ],
+        "pivot": {
+          "center": "wheel_01_L"
+        }
+      },
+      {
+        "name": "wheel_L1",
+        "parent": "bogie_L",
+        "objects": [
+          "wheel_02_L"
+        ],
+        "pivot": {
+          "center": "wheel_02_L"
+        }
+      },
+      {
+        "name": "steer_L2",
+        "parent": "bogie_L",
+        "objects": [
+          "suspension_steer_B_L"
+        ],
+        "pivot": {
+          "origin": "suspension_steer_B_L"
+        }
+      },
+      {
+        "name": "wheel_L2",
+        "parent": "steer_L2",
+        "objects": [
+          "wheel_03_L"
+        ],
+        "pivot": {
+          "center": "wheel_03_L"
+        }
+      },
+      {
+        "name": "rocker_R",
+        "objects": [
+          "suspension_arm_F_R_p",
+          "suspension_arm_B_R_p"
+        ],
+        "pivot": {
+          "origin": "suspension_arm_F_R_p"
+        }
+      },
+      {
+        "name": "bogie_R",
+        "parent": "rocker_R",
+        "objects": [
+          "Cube_04_p"
+        ],
+        "pivot": {
+          "origin": "Cube_04_p"
+        }
+      },
+      {
+        "name": "steer_R0",
+        "parent": "rocker_R",
+        "objects": [
+          "suspension_steer_F_R"
+        ],
+        "pivot": {
+          "origin": "suspension_steer_F_R"
+        }
+      },
+      {
+        "name": "wheel_R0",
+        "parent": "steer_R0",
+        "objects": [
+          "wheel_01_R"
+        ],
+        "pivot": {
+          "center": "wheel_01_R"
+        }
+      },
+      {
+        "name": "wheel_R1",
+        "parent": "bogie_R",
+        "objects": [
+          "wheel_02_R"
+        ],
+        "pivot": {
+          "center": "wheel_02_R"
+        }
+      },
+      {
+        "name": "steer_R2",
+        "parent": "bogie_R",
+        "objects": [
+          "suspension_steer_B_R"
+        ],
+        "pivot": {
+          "origin": "suspension_steer_B_R"
+        }
+      },
+      {
+        "name": "wheel_R2",
+        "parent": "steer_R2",
+        "objects": [
+          "wheel_03_R"
+        ],
+        "pivot": {
+          "center": "wheel_03_R"
+        }
+      },
+      {
+        "name": "mast",
+        "objects": [
+          "mast_p"
+        ],
+        "pivot": {
+          "origin": "mast_p"
+        }
+      },
+      {
+        "name": "hga",
+        "objects": [
+          "antenna_HG_02_p"
+        ],
+        "pivot": {
+          "origin": "antenna_HG_02_p"
+        }
+      }
+    ],
+    "frame": 620
+  },
+  "mer": {
+    "title": "Opportunity rover (MER-B)",
+    "source": {
+      "kind": "url",
+      "url": "https://raw.githubusercontent.com/nasa/NASA-3D-Resources/master/3D Models/Mars Exploration Rover - Spirit and Opportunity/Mars Exploration Rover - Spirit and Opportunity.blend"
+    },
+    "page": "https://github.com/nasa/NASA-3D-Resources/tree/master/3D%20Models/Mars%20Exploration%20Rover%20-%20Spirit%20and%20Opportunity",
+    "credit": "NASA/JPL-Caltech",
+    "license": "NASA media usage guidelines (not copyrighted)",
+    "forward": "-Y",
+    "up": "Z",
+    "scale": {
+      "axis": "y",
+      "m": 2.3,
+      "ref": "NASA MER fact sheet: 2.3 m wide (solar wings)"
+    },
+    "check": [
+      {
+        "what": "height",
+        "axis": "z",
+        "m": 1.5,
+        "ref": "NASA: 1.5 m high (Pancam mast)",
+        "tol": 8
+      },
+      {
+        "what": "length",
+        "axis": "x",
+        "m": 1.6,
+        "ref": "NASA: 1.6 m long",
+        "tol": 8
+      }
+    ],
+    "hide": [
+      "Cube*",
+      "_root"
+    ],
+    "maxTris": 40000,
+    "rig": [
+      {
+        "name": "rocker_R",
+        "objects": [
+          "suspension_left_front",
+          "suspension_left_middle_rocker"
+        ],
+        "pivot": {
+          "origin": "suspension_left_middle_rocker"
+        }
+      },
+      {
+        "name": "bogie_R",
+        "parent": "rocker_R",
+        "objects": [
+          "suspension_left_rear_rocker1"
+        ],
+        "pivot": {
+          "origin": "suspension_left_rear_rocker1"
+        }
+      },
+      {
+        "name": "steer_R0",
+        "parent": "rocker_R",
+        "objects": [
+          "suspension_left_front_axl"
+        ],
+        "pivot": {
+          "origin": "suspension_left_front_axl"
+        }
+      },
+      {
+        "name": "wheel_R0",
+        "parent": "steer_R0",
+        "objects": [
+          "suspension_left_front_wheel"
+        ],
+        "pivot": {
+          "center": "suspension_left_front_wheel"
+        }
+      },
+      {
+        "name": "wheel_R1",
+        "parent": "bogie_R",
+        "objects": [
+          "suspension_left_middle_wheel"
+        ],
+        "pivot": {
+          "center": "suspension_left_middle_wheel"
+        }
+      },
+      {
+        "name": "steer_R2",
+        "parent": "bogie_R",
+        "objects": [
+          "suspension_left_rear_axl"
+        ],
+        "pivot": {
+          "origin": "suspension_left_rear_axl"
+        }
+      },
+      {
+        "name": "wheel_R2",
+        "parent": "steer_R2",
+        "objects": [
+          "suspension_left_rear_wheel"
+        ],
+        "pivot": {
+          "center": "suspension_left_rear_wheel"
+        }
+      },
+      {
+        "name": "rocker_L",
+        "objects": [
+          "suspension_right_front",
+          "suspension_right_middle_rocker"
+        ],
+        "pivot": {
+          "origin": "suspension_right_middle_rocker"
+        }
+      },
+      {
+        "name": "bogie_L",
+        "parent": "rocker_L",
+        "objects": [
+          "suspension_right_rear_rocker1"
+        ],
+        "pivot": {
+          "origin": "suspension_right_rear_rocker1"
+        }
+      },
+      {
+        "name": "steer_L0",
+        "parent": "rocker_L",
+        "objects": [
+          "suspension_right_front_axl"
+        ],
+        "pivot": {
+          "origin": "suspension_right_front_axl"
+        }
+      },
+      {
+        "name": "wheel_L0",
+        "parent": "steer_L0",
+        "objects": [
+          "suspension_right_front_wheel"
+        ],
+        "pivot": {
+          "center": "suspension_right_front_wheel"
+        }
+      },
+      {
+        "name": "wheel_L1",
+        "parent": "bogie_L",
+        "objects": [
+          "suspension_right_middle_wheel"
+        ],
+        "pivot": {
+          "center": "suspension_right_middle_wheel"
+        }
+      },
+      {
+        "name": "steer_L2",
+        "parent": "bogie_L",
+        "objects": [
+          "suspension_right_rear_axl"
+        ],
+        "pivot": {
+          "origin": "suspension_right_rear_axl"
+        }
+      },
+      {
+        "name": "wheel_L2",
+        "parent": "steer_L2",
+        "objects": [
+          "suspension_right_rear_wheel"
+        ],
+        "pivot": {
+          "center": "suspension_right_rear_wheel"
+        }
+      },
+      {
+        "name": "mast",
+        "objects": [
+          "mast_base"
+        ],
+        "pivot": {
+          "origin": "mast_base"
+        }
+      }
+    ],
+    "frame": 3000
+  },
+  "apollo-lm": {
+    "title": "Apollo Lunar Module",
+    "source": {
+      "kind": "url",
+      "url": "https://raw.githubusercontent.com/nasa/NASA-3D-Resources/master/3D Models/Apollo Lunar Module/Apollo Lunar Module.glb"
+    },
+    "page": "https://github.com/nasa/NASA-3D-Resources/tree/master/3D%20Models/Apollo%20Lunar%20Module",
+    "credit": "NASA",
+    "license": "NASA media usage guidelines (not copyrighted)",
+    "forward": "-Y",
+    "up": "Z",
+    "scale": {
+      "axis": "z",
+      "m": 6.98,
+      "ref": "Apollo News Reference (Grumman): 22 ft 11 in tall, landing gear extended"
+    },
+    "check": [
+      {
+        "what": "landing-gear span (footpad outer edges)",
+        "axis": "x",
+        "m": 9.45,
+        "ref": "Grumman LM news reference: 31 ft across the landing gear",
+        "tol": 8
+      }
+    ],
+    "maxTris": 80000,
+    "rig": [],
+    "notes": "Descent engine exit in the baked model: 1.40 m across, 0.42 m above the pads (LMDE exit: 54 in = 1.37 m), an independent check of the scale."
+  },
+  "starship": {
+    "title": "SpaceX Starship Block 3 (ship)",
+    "source": {
+      "kind": "sketchfab",
+      "uid": "6f6c6f88a3eb4b4d822fdca66733fbb2"
+    },
+    "page": "https://sketchfab.com/3d-models/6f6c6f88a3eb4b4d822fdca66733fbb2",
+    "credit": "Clarence365",
+    "license": "CC BY 4.0",
+    "up": "Z",
+    "forward": "-X",
+    "origin": "base",
+    "scale": {
+      "axis": "z",
+      "m": 52.1,
+      "ref": "SpaceX: V3 stack 124.4 m minus the 72.3 m Super Heavy V3 = ~52.1 m ship"
+    },
+    "check": [
+      {
+        "what": "body diameter (incl. flaps, so wider)",
+        "axis": "y",
+        "m": 9.0,
+        "ref": "SpaceX: 9 m",
+        "tol": 80
+      }
+    ],
+    "hideTree": [
+      "Superheavy*"
+    ],
+    "maxTris": 160000,
+    "rig": [
+      {
+        "name": "flap_aft_L",
+        "objects": [
+          "Aft Flaps.002*"
+        ],
+        "pivot": {
+          "part": {
+            "y": "min"
+          }
+        }
+      },
+      {
+        "name": "flap_aft_R",
+        "objects": [
+          "Aft Flaps.003*"
+        ],
+        "pivot": {
+          "part": {
+            "y": "max"
+          }
+        }
+      },
+      {
+        "name": "flap_fwd_L",
+        "objects": [
+          "Foward Flap.002*"
+        ],
+        "pivot": {
+          "part": {
+            "y": "min"
+          }
+        }
+      },
+      {
+        "name": "flap_fwd_R",
+        "objects": [
+          "Foward Flap.003*"
+        ],
+        "pivot": {
+          "part": {
+            "y": "max"
+          }
+        }
+      },
+      {
+        "name": "engine_0",
+        "objects": [
+          "Raptor 3_7"
+        ],
+        "pivot": {
+          "part": {
+            "z": "min"
+          }
+        }
+      },
+      {
+        "name": "engine_1",
+        "objects": [
+          "Raptor 3.001_11"
+        ],
+        "pivot": {
+          "part": {
+            "z": "min"
+          }
+        }
+      },
+      {
+        "name": "engine_2",
+        "objects": [
+          "Raptor 3.002_12"
+        ],
+        "pivot": {
+          "part": {
+            "z": "min"
+          }
+        }
+      },
+      {
+        "name": "engine_vac_0",
+        "objects": [
+          "Raptor 3 Vaccum_8"
+        ],
+        "pivot": {
+          "part": {
+            "z": "min"
+          }
+        }
+      },
+      {
+        "name": "engine_vac_1",
+        "objects": [
+          "Raptor 3 Vaccum.001_9"
+        ],
+        "pivot": {
+          "part": {
+            "z": "min"
+          }
+        }
+      },
+      {
+        "name": "engine_vac_2",
+        "objects": [
+          "Raptor 3 Vaccum.002_10"
+        ],
+        "pivot": {
+          "part": {
+            "z": "min"
+          }
+        }
+      }
+    ],
+    "notes": "Real V3 ships have no landing legs. The lab's Starship lands on guessed legs (rated 3 m/s, as lunar/Mars ships will need); the model is drawn as built, without them.",
+    "imageFormat": "AUTO"
+  },
+  "falcon9": {
+    "title": "Falcon 9 (first stage)",
+    "source": {
+      "kind": "sketchfab",
+      "uid": "394f7cf52d124bbd9db69f24d1ff2f08"
+    },
+    "page": "https://sketchfab.com/3d-models/394f7cf52d124bbd9db69f24d1ff2f08",
+    "credit": "Stanley Creative",
+    "license": "CC BY 4.0",
+    "up": "Z",
+    "forward": "X",
+    "origin": "base",
+    "scale": {
+      "factor": 0.01,
+      "ref": "modelled in centimetres; its full stack is 71.0 m vs SpaceX's 70 m (+1.4%)"
+    },
+    "check": [
+      {
+        "what": "first stage + interstage",
+        "axis": "z",
+        "m": 47.7,
+        "ref": "SpaceX Falcon 9: 41.2 m first stage plus ~6.5 m interstage (approximate split, not published exactly)",
+        "tol": 5
+      }
+    ],
+    "hideTree": [
+      "Fairing",
+      "Second Stage"
+    ],
+    "maxTris": 100000,
+    "rig": [
+      {
+        "name": "leg_0",
+        "objects": [
+          "Landing Leg 3",
+          "Landing Leg 3 Hydraulic Attachment",
+          "Landing Leg Hydraulic Holder 3"
+        ],
+        "pivot": {
+          "at": [
+            1.498,
+            1.249,
+            1.884
+          ]
+        }
+      },
+      {
+        "name": "leg_1",
+        "objects": [
+          "Landing Leg 4",
+          "Landing Leg 4 Hydraulic Attachment",
+          "Landing Leg Hydraulic Holder 4"
+        ],
+        "pivot": {
+          "at": [
+            -1.249,
+            1.498,
+            1.884
+          ]
+        }
+      },
+      {
+        "name": "leg_2",
+        "objects": [
+          "Landing Leg 1",
+          "Landing Leg 1 Hydraulic Attachment",
+          "Landing Leg Hydraulic Holder 1"
+        ],
+        "pivot": {
+          "at": [
+            -1.498,
+            -1.249,
+            1.884
+          ]
+        }
+      },
+      {
+        "name": "leg_3",
+        "objects": [
+          "Landing Leg 2",
+          "Landing Leg 2 Hydraulic Attachment",
+          "Landing Leg Hydraulic Holder 2"
+        ],
+        "pivot": {
+          "at": [
+            1.249,
+            -1.498,
+            1.884
+          ]
+        }
+      }
+    ],
+    "notes": "Legs: four named carbon A-frames stowed flush on the tank (bottom at 1.88 m); hinged at their base on the tank wall (~1.95 m from the axis), they swing out and down to deploy."
+  },
+  "newglenn": {
+    "title": "Blue Origin New Glenn (GS1)",
+    "source": {
+      "kind": "sketchfab",
+      "uid": "60e49f5c126841469b7e5b97517e5271"
+    },
+    "page": "https://sketchfab.com/3d-models/60e49f5c126841469b7e5b97517e5271",
+    "credit": "Clarence365",
+    "license": "CC BY 4.0",
+    "up": "Z",
+    "forward": "X",
+    "origin": "base",
+    "scale": {
+      "axis": "z",
+      "m": 57.5,
+      "ref": "Blue Origin: first stage 57.5 m"
+    },
+    "check": [],
+    "hideTree": [
+      "Fairing*",
+      "Second Stage*"
+    ],
+    "maxTris": 100000,
+    "rig": [
+      {
+        "name": "engine_0",
+        "objects": [
+          "BE-4 Engine.002*"
+        ],
+        "pivot": {
+          "part": {
+            "z": "min"
+          }
+        }
+      },
+      {
+        "name": "engine_1",
+        "objects": [
+          "BE-4 Engine.003*"
+        ],
+        "pivot": {
+          "part": {
+            "z": "min"
+          }
+        }
+      },
+      {
+        "name": "engine_2",
+        "objects": [
+          "BE-4 Engine.004*"
+        ],
+        "pivot": {
+          "part": {
+            "z": "min"
+          }
+        }
+      },
+      {
+        "name": "engine_3",
+        "objects": [
+          "BE-4 Engine.005*"
+        ],
+        "pivot": {
+          "part": {
+            "z": "min"
+          }
+        }
+      },
+      {
+        "name": "engine_4",
+        "objects": [
+          "BE-4 Engine.006*"
+        ],
+        "pivot": {
+          "part": {
+            "z": "min"
+          }
+        }
+      },
+      {
+        "name": "engine_5",
+        "objects": [
+          "BE-4 Engine.007*"
+        ],
+        "pivot": {
+          "part": {
+            "z": "min"
+          }
+        }
+      },
+      {
+        "name": "engine_6",
+        "objects": [
+          "BE-4 Engine.008*"
+        ],
+        "pivot": {
+          "part": {
+            "z": "min"
+          }
+        }
+      }
+    ],
+    "notes": "Legs are modelled stowed and drawn as modelled. Body: 1.32 model units x 5.323 = 7.03 m across (Blue Origin: 7 m); the bbox is wider because of the aft fins."
+  },
+  "venera": {
+    "title": "Venera 12-14 lander",
+    "source": {
+      "kind": "sketchfab",
+      "uid": "8dabffdd60f24bcba9dc8ca57e73f620"
+    },
+    "page": "https://sketchfab.com/3d-models/8dabffdd60f24bcba9dc8ca57e73f620",
+    "credit": "tashtego",
+    "license": "CC BY 4.0",
+    "up": "Z",
+    "forward": "X",
+    "origin": "base",
+    "scale": {
+      "axis": "x",
+      "m": 2.0,
+      "ref": "~2 m across the aerobraking disk: what the sim's calibrated disk drag (Cd x A = 3.7 m^2) implies, not an independent source"
+    },
+    "maxTris": 40000,
+    "rig": [],
+    "status": "rejected",
+    "notes": "Rejected: the model is the whole Venera 12-14 spacecraft in cruise (bus, solar panels, entry sphere); the lander itself isn't modelled. No other free Venera lander model found. Stand-in kept."
+  },
+  "lunokhod": {
+    "title": "Lunokhod 1",
+    "source": {
+      "kind": "sketchfab",
+      "uid": "3f5a5f02ad53447b9dff335e42d2469c"
+    },
+    "page": "https://sketchfab.com/3d-models/3f5a5f02ad53447b9dff335e42d2469c",
+    "credit": "sheffrator",
+    "license": "CC BY 4.0",
+    "up": "Z",
+    "forward": "-Y",
+    "origin": "base",
+    "scale": {
+      "factor": 1.397,
+      "ref": "wheel diameter 0.51 m (NSSDCA/Lavochkin): the model's wheels are 0.365 units across"
+    },
+    "check": [],
+    "maxTris": 60000,
+    "rig": [
+      {
+        "name": "wheel_L0",
+        "objects": [
+          "Wheel",
+          "Wheel.0*",
+          "WheelAxis*"
+        ],
+        "box": [
+          [
+            0.65,
+            0.4,
+            0
+          ],
+          [
+            1.3,
+            1.4,
+            0.8
+          ]
+        ],
+        "pivot": {
+          "part": {}
+        }
+      },
+      {
+        "name": "wheel_L1",
+        "objects": [
+          "Wheel",
+          "Wheel.0*",
+          "WheelAxis*"
+        ],
+        "box": [
+          [
+            0.05,
+            0.4,
+            0
+          ],
+          [
+            0.65,
+            1.4,
+            0.8
+          ]
+        ],
+        "pivot": {
+          "part": {}
+        }
+      },
+      {
+        "name": "wheel_L2",
+        "objects": [
+          "Wheel",
+          "Wheel.0*",
+          "WheelAxis*"
+        ],
+        "box": [
+          [
+            -0.5,
+            0.4,
+            0
+          ],
+          [
+            0.05,
+            1.4,
+            0.8
+          ]
+        ],
+        "pivot": {
+          "part": {}
+        }
+      },
+      {
+        "name": "wheel_L3",
+        "objects": [
+          "Wheel",
+          "Wheel.0*",
+          "WheelAxis*"
+        ],
+        "box": [
+          [
+            -1.2,
+            0.4,
+            0
+          ],
+          [
+            -0.5,
+            1.4,
+            0.8
+          ]
+        ],
+        "pivot": {
+          "part": {}
+        }
+      },
+      {
+        "name": "wheel_R0",
+        "objects": [
+          "Wheel",
+          "Wheel.0*",
+          "WheelAxis*"
+        ],
+        "box": [
+          [
+            0.65,
+            -1.4,
+            0
+          ],
+          [
+            1.3,
+            -0.4,
+            0.8
+          ]
+        ],
+        "pivot": {
+          "part": {}
+        }
+      },
+      {
+        "name": "wheel_R1",
+        "objects": [
+          "Wheel",
+          "Wheel.0*",
+          "WheelAxis*"
+        ],
+        "box": [
+          [
+            0.05,
+            -1.4,
+            0
+          ],
+          [
+            0.65,
+            -0.4,
+            0.8
+          ]
+        ],
+        "pivot": {
+          "part": {}
+        }
+      },
+      {
+        "name": "wheel_R2",
+        "objects": [
+          "Wheel",
+          "Wheel.0*",
+          "WheelAxis*"
+        ],
+        "box": [
+          [
+            -0.5,
+            -1.4,
+            0
+          ],
+          [
+            0.05,
+            -0.4,
+            0.8
+          ]
+        ],
+        "pivot": {
+          "part": {}
+        }
+      },
+      {
+        "name": "wheel_R3",
+        "objects": [
+          "Wheel",
+          "Wheel.0*",
+          "WheelAxis*"
+        ],
+        "box": [
+          [
+            -1.2,
+            -1.4,
+            0
+          ],
+          [
+            -0.5,
+            -0.4,
+            0.8
+          ]
+        ],
+        "pivot": {
+          "part": {}
+        }
+      },
+      {
+        "name": "lid",
+        "objects": [
+          "lid.001"
+        ],
+        "pivot": {
+          "part": {
+            "x": "max",
+            "z": "min"
+          }
+        }
+      }
+    ],
+    "keep": [
+      "Lunokhod1"
+    ],
+    "notes": "The source is a diorama (Lunokhod 1 twice on a cratered Moon); only the upright rover is kept. Scaled by the wheel (0.51 m), its track comes out 1.79 m vs the published 1.6 m (+12%). Lid modelled open."
+  },
+  "pragyan": {
+    "title": "Pragyan rover",
+    "source": {
+      "kind": "sketchfab",
+      "uid": "2a84cfca3dc54359a3bd834fb279e9fd"
+    },
+    "page": "https://sketchfab.com/3d-models/2a84cfca3dc54359a3bd834fb279e9fd",
+    "credit": "sohamr.sr",
+    "license": "CC BY 4.0",
+    "up": "Z",
+    "forward": "X",
+    "origin": "base",
+    "scale": {
+      "axis": "x",
+      "m": 0.917,
+      "ref": "0.92 m long, as the lab's stand-in (RoverView.tsx: 0.92 x 0.75 x 0.40 m); verify on bake"
+    },
+    "check": [
+      {
+        "what": "width",
+        "axis": "y",
+        "m": 0.75,
+        "ref": "0.75 m (RoverView.tsx)",
+        "tol": 15
+      }
+    ],
+    "maxTris": 30000,
+    "rig": [],
+    "status": "rejected",
+    "notes": "Rejected: the only CC model shows 4 wheels; Pragyan has 6 on a rocker-bogie. Stand-in kept."
+  },
+  "yutu": {
+    "title": "Yutu lunar rover",
+    "source": {
+      "kind": "sketchfab",
+      "uid": "d9564c9a60c14b85a880cc0bfcf1a6b5"
+    },
+    "page": "https://sketchfab.com/3d-models/d9564c9a60c14b85a880cc0bfcf1a6b5",
+    "credit": "tashtego",
+    "license": "CC BY 4.0",
+    "up": "Z",
+    "forward": "X",
+    "origin": "base",
+    "scale": {
+      "axis": "x",
+      "m": 1.5,
+      "ref": "1.5 m long (RoverView.tsx: 1.5 x 1.0 x 1.1 m); Yutu-2 is a near-copy of Yutu"
+    },
+    "check": [
+      {
+        "what": "height",
+        "axis": "z",
+        "m": 1.1,
+        "ref": "1.1 m (RoverView.tsx)",
+        "tol": 20
+      }
+    ],
+    "maxTris": 40000,
+    "rig": [],
+    "status": "rejected",
+    "notes": "Rejected: proportions miss the published 1.5 x 1.0 x 1.1 m by ~25%. Stand-in kept."
+  },
+  "skidsteer": {
+    "title": "Caterpillar skid steer loader",
+    "source": {
+      "kind": "sketchfab",
+      "uid": "859a64d242314ec3af5bfb449bdfa673"
+    },
+    "page": "https://sketchfab.com/3d-models/859a64d242314ec3af5bfb449bdfa673",
+    "credit": "3DBuilder",
+    "license": "CC BY 4.0",
+    "up": "Z",
+    "forward": "X",
+    "origin": "base",
+    "scale": {
+      "axis": "z",
+      "m": 2.06,
+      "ref": "Cat 262D3 spec sheet: 2,061 mm to the top of the cab"
+    },
+    "maxTris": 80000,
+    "rig": [],
+    "status": "rejected",
+    "notes": "Rejected: the model is a Cat 242D, a radial-lift machine; the lab's MuJoCo rig follows the 262D3 spec sheet (vertical lift), so the real arms would swing on the wrong arc. Stand-in kept."
+  }
+}

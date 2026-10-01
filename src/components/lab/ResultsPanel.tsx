@@ -2,6 +2,7 @@
 
 import { Check, Link2, Pin, PinOff } from "lucide-react";
 import { useState } from "react";
+import { FlightCharts } from "./FlightCharts";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { encodeConfig, useLab } from "@/lib/lab-store";
@@ -29,7 +30,7 @@ const fmtKg = (kg: number) => (kg >= 1000 ? `${(kg / 1000).toFixed(kg >= 10_000 
 
 function surfaceTime(r: RunResult) {
   const { deathS, landedS } = r.verdict;
-  if (r.flight?.destroyedS != null) return r.flight.outcome === "crushed" ? "crushed" : "crashed";
+  if (r.flight?.destroyedS != null) return r.flight.outcome === "crushed" ? "crushed" : r.flight.outcome === "burned" ? "burned up" : "crashed";
   if (landedS === null) return "never landed";
   if (deathS === null) return `> ${formatDuration(r.durationS - landedS)}`;
   return formatDuration(Math.max(0, deathS - landedS));
@@ -195,11 +196,15 @@ function Notes() {
 function RocketModelNote() {
   return (
     <li>
-      Powered landing: a 2-D point mass with gravity, the centrifugal term of orbital speed, drag, buoyancy and thrust. Engine thrust follows the ideal
-      nozzle equations from one published (thrust, Isp) point, with flow separation (Summerfield, 0.4 × ambient) when the outside air is thicker than
-      the bell was designed for. Thin tanks buckle when the outside pressure beats the tank pressure. Guidance: a gravity turn from orbit on airless
-      worlds, a lifting entry for Starship on Mars, then a vertical velocity profile with hoverslam when the engines can&apos;t throttle low enough.
-      Entry heating is not simulated.
+      Powered landing: a 2-D point mass with gravity, the centrifugal term of orbital speed, drag, lift, buoyancy and thrust. Drag and lift come from
+      the stage&apos;s geometry at its angle of attack and Mach number (slender-body crossflow model: Allen &amp; Perkins, Jorgensen; flaps and grid fins as
+      flat plates). Engine thrust follows the ideal nozzle equations from one published (thrust, Isp) point, with flow separation (Summerfield, 0.4 ×
+      ambient) when the outside air is thicker than the bell was designed for. Thin tanks buckle when the outside pressure beats the tank pressure.
+      Entry heating: Sutton-Graves convective flux on the windward side, base and lee, conducted through the tiles (1-D finite differences, LI-900
+      properties) into the skin; tiles past their limit fail, a skin past its structural limit means burn-through. Radiative shock-layer heating isn&apos;t
+      included (small below ~6 km/s in CO₂). Guidance: a gravity turn from orbit on airless worlds, an entry burn for boosters, a lifting entry for
+      Starship on Mars, then a vertical velocity profile with hoverslam when the engines can&apos;t throttle low enough. Attitude is commanded, not
+      integrated.
     </li>
   );
 }
@@ -221,6 +226,7 @@ export function ResultsPanel() {
           <Timeline />
         </TabsContent>
         <TabsContent value="charts" className="space-y-4 p-4">
+          {result.flight && <FlightCharts result={result} />}
           {result.scenario.planet && (
             <div>
               <h4 className="mb-2 text-[11px] tracking-wide text-stone-500 uppercase">Day, night &amp; power</h4>

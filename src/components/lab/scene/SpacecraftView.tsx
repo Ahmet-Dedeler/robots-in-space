@@ -2,7 +2,8 @@
 
 /**
  * Rocket landers in 3D: Starship, the Falcon 9 and New Glenn boosters, the
- * Apollo LM. Real dimensions (metres). The pose comes from the powered-descent
+ * Apollo LM, drawn from real models where baked (NASA's LM; docs/models.md)
+ * and from published dimensions otherwise (metres). The pose comes from the powered-descent
  * sim (spacecraft/landing.ts): height, pitch (belly-flop, flip, gravity turn),
  * engines lit and throttle, crushed tanks.
  *
@@ -16,12 +17,13 @@
  *   oxidiser) and the toppled wreck; crushed tanks squash the hull.
  */
 import { useFrame, useThree } from "@react-three/fiber";
-import { useMemo, useRef } from "react";
+import { Suspense, useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { useLab } from "@/lib/lab-store";
 import { flightAt } from "@/sim/spacecraft/landing";
 import type { SpacecraftModel } from "@/sim/vehicles/types";
 import { incandescence } from "./damage";
+import { modelIdFor, modelMeta, useRealModel } from "./real-models";
 import { useTerrain } from "./useScene";
 
 // ---- Geometry specs ------------------------------------------------------------
@@ -77,11 +79,13 @@ const SPECS: Record<SpacecraftModel, Spec> = {
     plume: METHALOX,
   },
   falcon9: {
-    height: 41.2,
+    // First stage + interstage (the real model: 48.7 m).
+    height: 48.7,
     radius: 1.83,
     baseY: 2.2,
     bells: [{ x: 0, z: 0, r: 0.46, len: 1.6, landing: true }, ...ring(8, 1.25).map(([x, z]) => ({ x, z, r: 0.46, len: 1.6, landing: false }))],
-    legs: ring(4, 1, Math.PI / 4).map(([x, z]) => ({ az: Math.atan2(z, x), hingeR: 1.85, hingeY: 2.6, footR: 9 })),
+    // Feet ~11 m out: the model's 9.3 m legs hinged 1.95 m from the axis, 1.9 m up, swung down to the ground.
+    legs: ring(4, 1, Math.PI / 4).map(([x, z]) => ({ az: Math.atan2(z, x), hingeR: 1.95, hingeY: 1.9, footR: 11 })),
     legRadius: 0.22,
     plume: KEROLOX,
   },
@@ -93,16 +97,19 @@ const SPECS: Record<SpacecraftModel, Spec> = {
       { x: 0, z: 0, r: 0.85, len: 2.4, landing: true },
       ...ring(6, 2.25).map(([x, z], i) => ({ x, z, r: 0.85, len: 2.4, landing: i % 3 === 0 })),
     ],
-    legs: ring(6, 1, Math.PI / 6).map(([x, z]) => ({ az: Math.atan2(z, x), hingeR: 3.5, hingeY: 5, footR: 8.5 })),
+    // The model's six legs are drawn stowed, ~4 m from the axis.
+    legs: ring(6, 1, Math.PI / 6).map(([x, z]) => ({ az: Math.atan2(z, x), hingeR: 3.5, hingeY: 5, footR: 4.0 })),
     legRadius: 0.3,
     plume: METHALOX,
   },
   lm: {
-    height: 7.0,
+    height: 6.98,
     radius: 2.1,
-    baseY: 1.7,
-    bells: [{ x: 0, z: 0, r: 0.75, len: 1.4, landing: true }],
-    legs: ring(4, 1, Math.PI / 4).map(([x, z]) => ({ az: Math.atan2(z, x), hingeR: 2.2, hingeY: 2.0, footR: 4.6, fixed: true })),
+    // LMDE exit 1.37 m across, 0.42 m above the pads (NASA model, docs/models.md).
+    baseY: 1.82,
+    bells: [{ x: 0, z: 0, r: 0.69, len: 1.4, landing: true }],
+    // Footpads on the ±x/±z axes of the NASA model, ~4.0 m from the centre.
+    legs: ring(4, 1).map(([x, z]) => ({ az: Math.atan2(z, x), hingeR: 2.2, hingeY: 2.0, footR: 4.0, fixed: true })),
     legRadius: 0.09,
     plume: HYPERGOLIC,
   },
@@ -352,6 +359,56 @@ interface DustState {
 let seed = 4242;
 const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
 
+/** Which of a real model's engines light for landing (the sim's `landingEngines`, in the vehicle's real pattern). */
+const LANDING_ENGINES: Record<string, string[]> = {
+  starship: ["engine_0", "engine_1", "engine_2"],
+  // Centre BE-4 plus two opposite ring engines.
+  newglenn: ["engine_0", "engine_1", "engine_3"],
+};
+
+/** Nozzle exits from a real model's engine pivots (bottom centre, radius from the bell's size); null if not rigged. */
+function realExits(id: string | null, model: SpacecraftModel) {
+  const m = modelMeta(id);
+  if (!m) return null;
+  const names = Object.keys(m.pivots).filter((k) => k.startsWith("engine_"));
+  if (!names.length) {
+    // Falcon 9's octaweb is one mesh: the centre Merlin 1D's exit sits at the base (0.92 m across).
+    return model === "falcon9" ? [{ x: 0, y: 0.05, z: 0, r: 0.46, landing: true }] : null;
+  }
+  const landing = new Set(LANDING_ENGINES[id!] ?? names);
+  return names.map((k) => ({ x: m.pivots[k][0], y: m.pivots[k][1], z: m.pivots[k][2], r: (m.parts?.[k]?.[0] ?? 1) / 2, landing: landing.has(k) }));
+}
+
+/** The real model (docs/models.md): base at y = 0, belly (windward) toward +x. Hands its materials up for heat glow. */
+function RealBody({
+  id,
+  materialsRef,
+  legsRef,
+  flapsRef,
+}: {
+  id: string;
+  materialsRef: React.RefObject<THREE.MeshStandardMaterial[]>;
+  legsRef: React.RefObject<THREE.Object3D[]>;
+  flapsRef: React.RefObject<Record<string, THREE.Object3D>>;
+}) {
+  const m = useRealModel(id);
+  useEffect(() => {
+    // Heat glow goes on the tiles where the model has them (Starship), else on everything.
+    const tiles = m.materials.filter((x) => /tile|heat ?shield/i.test(x.name));
+    materialsRef.current = tiles.length ? tiles : m.materials;
+    legsRef.current = Object.keys(m.nodes)
+      .filter((k) => /^leg_\d$/.test(k))
+      .map((k) => m.nodes[k]);
+    flapsRef.current = Object.fromEntries(Object.entries(m.nodes).filter(([k]) => k.startsWith("flap_")));
+    return () => {
+      materialsRef.current = [];
+      legsRef.current = [];
+      flapsRef.current = {};
+    };
+  }, [m, materialsRef, legsRef, flapsRef]);
+  return <primitive object={m.scene} />;
+}
+
 // ---- The view ---------------------------------------------------------------------------
 
 const SHOW_TRUE_ALTITUDE_M = 3000;
@@ -363,6 +420,10 @@ export function SpacecraftView({ model }: { model: SpacecraftModel }) {
   const tilt = useRef<THREE.Group>(null);
   const body = useRef<THREE.Group>(null);
   const glow = useRef<THREE.MeshStandardMaterial>(null);
+  const realId = modelIdFor({ kind: "spacecraft", model });
+  const realMats = useRef<THREE.MeshStandardMaterial[]>([]);
+  const plasma = useRef<THREE.Mesh>(null);
+  const plasmaMat = useRef<THREE.MeshBasicMaterial>(null);
   const legs = useRef<(THREE.Group | null)[]>([]);
   const plumes = useRef<(THREE.Group | null)[]>([]);
   const streaks = useRef<THREE.Points>(null);
@@ -376,7 +437,11 @@ export function SpacecraftView({ model }: { model: SpacecraftModel }) {
   const dustState = useRef<DustState | null>(null);
   const controls = useThree((s) => s.controls) as unknown as { target: THREE.Vector3; update: () => void } | null;
   const camera = useThree((s) => s.camera);
-  const landingBells = spec.bells.map((b, i) => (b.landing ? i : -1)).filter((i) => i >= 0);
+  // Nozzle exits: from the real model's engine pivots (bottom centre of each bell) when rigged, else the stand-in spec.
+  const exits = useMemo(() => realExits(realId, model) ?? spec.bells.map((b) => ({ x: b.x, y: spec.baseY - b.len, z: b.z, r: b.r, landing: b.landing })), [realId, model, spec]);
+  const landingBells = exits.map((b, i) => (b.landing ? i : -1)).filter((i) => i >= 0);
+  const realLegNodes = useRef<THREE.Object3D[]>([]);
+  const flapNodes = useRef<Record<string, THREE.Object3D>>({});
 
   // Feet rest on the highest ground under them.
   const groundY = useMemo(() => {
@@ -412,7 +477,7 @@ export function SpacecraftView({ model }: { model: SpacecraftModel }) {
     const td = f?.touchdownS ?? null;
     const landed = td === null ? !f : playback.t >= td;
     const outcome = f?.outcome ?? "landed";
-    const wrecked = landed && (outcome === "crashed" || outcome === "crushed");
+    const wrecked = landed && (outcome === "crashed" || outcome === "crushed" || outcome === "burned");
     const crushed = st?.crushed ?? false;
     const airy = (st?.pressurePa ?? 0) > 50;
 
@@ -446,6 +511,23 @@ export function SpacecraftView({ model }: { model: SpacecraftModel }) {
       g.rotation.z = -a;
       if (wrecked && outcome === "crashed") g.rotation.z = -dep * 0.6;
     });
+    // Real Falcon 9 legs: hinged at their base on the tank, they swing out and down ~102° to reach the ground.
+    realLegNodes.current.forEach((n) => {
+      const r = Math.hypot(n.position.x, n.position.z) || 1;
+      const angle = (wrecked && outcome === "crashed" ? 0.6 : deploy) * ((102 * Math.PI) / 180);
+      n.quaternion.setFromAxisAngle(new THREE.Vector3(n.position.z / r, 0, -n.position.x / r), angle);
+    });
+    // Starship's flaps: small antiphase trim while it falls belly-first, folded leeward for the burn and on the ground.
+    const fl = flapNodes.current;
+    if (fl.flap_aft_L) {
+      const bellyFirst = !landed && st !== null && st.aoaDeg < 150 && st.lit === 0 && airy;
+      const trim = bellyFirst ? 0.09 * Math.sin(playback.t * 0.7) : 0;
+      const fold = bellyFirst || (!landed && !airy) ? 0 : 0.7;
+      fl.flap_aft_L.rotation.y = fold + trim;
+      fl.flap_aft_R.rotation.y = -fold - trim;
+      fl.flap_fwd_L.rotation.y = fold - trim;
+      fl.flap_fwd_R.rotation.y = -fold + trim;
+    }
 
     // Plumes.
     const thr = landed ? 0 : (st?.throttle ?? 0);
@@ -455,7 +537,7 @@ export function SpacecraftView({ model }: { model: SpacecraftModel }) {
     const dense = p / 1e5;
     const lengthK = (airy ? 1 / (1 + 0.35 * dense) : 1.4) * (0.5 + thr);
     const widthK = airy ? 1 + 1 / (1 + dense) : 3.2;
-    spec.bells.forEach((b, i) => {
+    exits.forEach((b, i) => {
       const g = plumes.current[i];
       if (!g) return;
       const rank = landingBells.indexOf(i);
@@ -547,9 +629,22 @@ export function SpacecraftView({ model }: { model: SpacecraftModel }) {
     posAttr.needsUpdate = true;
     if (dustMat.current) dustMat.current.size = Math.max(0.6, spec.radius * 0.5);
 
-    // Incandescence on the shell (nothing glows below ~525 °C).
-    const skinK = useLab.getState().result.nodes.length ? stateSkinK() : 300;
-    if (glow.current) glow.current.emissive.copy(incandescence(skinK));
+    // Incandescence on the shell (nothing glows below ~525 °C): the thermal run's skin, or entry heating's hottest surface.
+    const skinK = Math.max(useLab.getState().result.nodes.length ? stateSkinK() : 300, !landed && st ? st.surfaceK : 0);
+    const hot = incandescence(skinK);
+    if (glow.current) glow.current.emissive.copy(hot);
+    for (const m of realMats.current) m.emissive.copy(hot);
+    // Entry plasma: the shock layer ahead of the windward side glows once the heat flux is large.
+    if (plasma.current && plasmaMat.current) {
+      const q = !landed && st ? st.heatWm2 : 0;
+      const k = Math.min(1, Math.max(0, Math.log10(Math.max(q, 1) / 5_000) / 1.5));
+      plasma.current.visible = k > 0;
+      plasmaMat.current.opacity = 0.35 * k;
+      // Belly-first: in front of the windward side (+x); engines-first: below the base.
+      const belly = (st?.aoaDeg ?? 180) < 150;
+      plasma.current.position.set(belly ? spec.radius * 0.9 : 0, belly ? spec.height * 0.5 : -spec.radius * 0.2, 0);
+      plasma.current.scale.set(belly ? spec.radius * 0.6 : spec.radius * 1.4, belly ? spec.height * 0.55 : spec.radius * 0.5, spec.radius * 1.4);
+    }
 
     // Camera follows the craft.
     if (controls) {
@@ -569,25 +664,26 @@ export function SpacecraftView({ model }: { model: SpacecraftModel }) {
       <group ref={root}>
         <group ref={tilt}>
           <group ref={body}>
-            {model === "starship" ? (
-              <StarshipModel glow={glow} c={c} />
-            ) : model === "falcon9" ? (
-              <Falcon9Model glow={glow} c={c} />
-            ) : model === "newglenn" ? (
-              <NewGlennModel glow={glow} c={c} />
+            {realId ? (
+              <Suspense fallback={<StandIn model={model} glow={glow} c={c} />}>
+                <RealBody id={realId} materialsRef={realMats} legsRef={realLegNodes} flapsRef={flapNodes} />
+              </Suspense>
             ) : (
-              <LunarModuleModel glow={glow} c={c} />
+              <StandIn model={model} glow={glow} c={c} />
             )}
-            <Bells bells={spec.bells} baseY={c} />
-            {spec.bells.map((b, i) => (
-              <group key={i} ref={(el) => void (plumes.current[i] = el)} position={[b.x, c - b.len, b.z]} visible={false}>
+            <mesh ref={plasma} visible={false}>
+              <sphereGeometry args={[1, 32, 16]} />
+              <meshBasicMaterial ref={plasmaMat} color="#ff9a6a" transparent opacity={0} blending={THREE.AdditiveBlending} depthWrite={false} toneMapped={false} />
+            </mesh>
+            {exits.map((b, i) => (
+              <group key={i} ref={(el) => void (plumes.current[i] = el)} position={[b.x, b.y, b.z]} visible={false}>
                 <PlumeCone color={plumeColor.outer} opacity={plumeColor.opacity * 0.6} />
                 <group scale={[0.55, 0.45, 0.55]}>
                   <PlumeCone color={plumeColor.core} opacity={plumeColor.opacity} inner />
                 </group>
               </group>
             ))}
-            {spec.legs.map((l, i) => {
+            {!realId && spec.legs.map((l, i) => {
               const len = Math.hypot(l.footR - l.hingeR, l.hingeY);
               return (
                 <group key={i} rotation-y={-l.az}>
@@ -620,6 +716,25 @@ export function SpacecraftView({ model }: { model: SpacecraftModel }) {
         <sphereGeometry args={[1, 32, 16]} />
         <meshBasicMaterial ref={fireMat} color="#ff8a2a" transparent opacity={0.9} blending={THREE.AdditiveBlending} depthWrite={false} toneMapped={false} />
       </mesh>
+    </>
+  );
+}
+
+/** Stand-in drawn from published dimensions, for vehicles whose real model isn't baked (docs/models.md). */
+function StandIn({ model, glow, c }: { model: SpacecraftModel; glow: GlowRef; c: number }) {
+  const spec = SPECS[model];
+  return (
+    <>
+      {model === "starship" ? (
+        <StarshipModel glow={glow} c={c} />
+      ) : model === "falcon9" ? (
+        <Falcon9Model glow={glow} c={c} />
+      ) : model === "newglenn" ? (
+        <NewGlennModel glow={glow} c={c} />
+      ) : (
+        <LunarModuleModel glow={glow} c={c} />
+      )}
+      <Bells bells={spec.bells} baseY={c} />
     </>
   );
 }

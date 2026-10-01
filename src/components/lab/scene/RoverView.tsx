@@ -1,8 +1,10 @@
 "use client";
 
 /**
- * Planetary rovers, drawn from their published dimensions (no official
- * meshes are used). Kinematic, not MuJoCo: at 1-20 cm/s the dynamics are
+ * Planetary rovers. Curiosity and Opportunity are NASA's own models
+ * (RealRoverView.tsx); the others fall back to stand-ins drawn here from
+ * their published dimensions until a real model is baked (docs/models.md).
+ * Kinematic, not MuJoCo: at 1-20 cm/s the dynamics are
  * quasi-static, so each wheel rests on the same terrain height function the
  * rest of the lab uses.
  *
@@ -25,11 +27,13 @@
  * wheels.
  */
 import { useFrame, useThree } from "@react-three/fiber";
-import { useMemo, useRef } from "react";
+import { Suspense, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { useLab } from "@/lib/lab-store";
 import { stateAt } from "@/sim/mission/run";
 import type { RoverModel } from "@/sim/vehicles/types";
+import { modelMeta } from "./real-models";
+import { RealRoverView } from "./RealRoverView";
 import { useTerrain } from "./useScene";
 
 interface Spec {
@@ -435,6 +439,19 @@ function Body({ model, s, lid, mast, fins, pivotDrop }: { model: RoverModel; s: 
 }
 
 export function RoverView({ model }: { model: RoverModel }) {
+  const mech = useLab((st) => st.config.build.mechanics);
+  // The real model is used once it's baked *and* rigged (rocker pivots found).
+  const pv = modelMeta(model)?.pivots;
+  if (!pv?.rocker_L && !pv?.wheel_L0) return <StandInRover model={model} />;
+  return (
+    <Suspense fallback={<StandInRover model={model} />}>
+      <RealRoverView id={model} speedMs={mech.kind === "rover" ? mech.speedMs : 0} />
+    </Suspense>
+  );
+}
+
+/** Stand-in drawn from published dimensions, for rovers without a baked real model. */
+function StandInRover({ model }: { model: RoverModel }) {
   const spec = SPECS[model];
   const terrain = useTerrain();
   const root = useRef<THREE.Group>(null);

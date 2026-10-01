@@ -29,6 +29,7 @@ Browser sandbox for physics experiments on other worlds: drop a robot, rover, la
 - `src/components/lab/` is the UI: panels, uPlot charts, and the R3F scene. MuJoCo runs through the official `@mujoco/mujoco` WASM bindings.
 - `src/lib/lab-store.ts`: zustand store (config, result, playback, share links).
 - `tools/` is Python (uv) for offline data baking: `bake_co2.py` (CoolProp), `bake_robots.py` (meshes, policy weights, reference fixtures) and `bake_sky.py` (Yale Bright Star Catalogue and NASA Blue Marble into `public/sky/`).
+- `public/models/` holds real 3D vehicle models baked by `tools/bake_models.py` (Blender, `pnpm bake:models`) from `tools/models.json`; `scene/real-models.tsx` loads them. Sources, licenses and scale checks: `docs/models.md`.
 - `public/robots/` holds the baked robot assets. `public/mujoco/` is copied from node_modules on install (gitignored).
 
 ## Rules
@@ -40,6 +41,8 @@ Browser sandbox for physics experiments on other worlds: drop a robot, rover, la
 - Keep Venus bit-identical when touching `planets/`: the `World` for Venus must not change any Venus number.
 - Mutable engine objects (MuJoCo model/data, three.js objects touched per frame) live in refs, not React state or memo. The React Compiler lint rules enforce this.
 - Colors for chart series are fixed per part role (`ROLE_COLOR`). Never cycle them.
+- Draw vehicles from real models (`docs/models.md`), not shapes invented in three.js. Scale every model to a published dimension and list the check. Procedural stand-ins are only a fallback until a model is baked.
+- Spacecraft aero and entry heating come from geometry (`sim/spacecraft/aero.ts`, `tps.ts`); don't reintroduce tuned drag areas.
 - Running logs and findings go in `docs/`, not here.
 
 ## Commands

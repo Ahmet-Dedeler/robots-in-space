@@ -20,6 +20,24 @@ import { MachineView } from "./scene/MachineView";
 import { SpacecraftView, spacecraftHeight } from "./scene/SpacecraftView";
 import { flightAt } from "@/sim/spacecraft/landing";
 import { MACHINES } from "@/sim/robots/machines";
+import { modelIdFor, modelMeta } from "./scene/real-models";
+
+/** Where the 3D model comes from (CC-BY requires the credit; NASA's are credited by courtesy). */
+function ModelCredit() {
+  const mech = useLab((s) => s.config.build.mechanics);
+  const m = modelMeta(modelIdFor(mech));
+  if (!m) return null;
+  return (
+    <a
+      href={m.page}
+      target="_blank"
+      rel="noreferrer"
+      className="absolute bottom-2 left-3 rounded bg-black/30 px-2 py-0.5 text-[10px] text-stone-300/80 backdrop-blur hover:text-stone-100"
+    >
+      3D model: {m.title} · {m.credit} · {m.license}
+    </a>
+  );
+}
 
 /** Advances the experiment clock every rendered frame. */
 function Ground() {
@@ -105,6 +123,17 @@ function Hud() {
         )}
         {fl && !fl.ended && fl.lit > 0 && <Chip label="Engines" value={`${fl.lit} lit · ${Math.round(fl.throttle * 100)}%`} tone="ok" />}
         {fl?.crushed && <Chip label="Tanks" value="crushed" tone="bad" />}
+        {fl && !fl.ended && fl.qPa > 1 && (
+          <Chip label="Air" value={`M ${fl.mach.toFixed(fl.mach < 10 ? 2 : 1)} · q ${fl.qPa >= 1000 ? `${(fl.qPa / 1000).toFixed(1)} kPa` : `${Math.round(fl.qPa)} Pa`}`} tone="ok" />
+        )}
+        {fl && !fl.ended && fl.qPa > 1 && <Chip label="Attitude" value={`AoA ${Math.round(fl.aoaDeg)}° · ${fl.gLoad.toFixed(1)} g`} tone={fl.gLoad > 6 ? "warn" : "ok"} />}
+        {fl && !fl.ended && fl.heatWm2 > 1000 && (
+          <Chip
+            label="Heating"
+            value={`${(fl.heatWm2 / 1000).toFixed(0)} kW/m² · ${Math.round(fl.surfaceK - 273.15)} °C`}
+            tone={fl.surfaceK > 1500 ? "bad" : fl.surfaceK > 1100 ? "warn" : "ok"}
+          />
+        )}
         <Chip label="Frame" value={`${Math.round(st.frameYieldFraction * 100)}% strength`} tone={frameOk ? (st.frameYieldFraction > 0.6 ? "ok" : "warn") : "bad"} />
       </div>
     </>
@@ -164,6 +193,7 @@ export default function Viewport() {
         </EffectComposer>
       </Canvas>
       <Hud />
+      <ModelCredit />
       {humanoid && status === null && (
         <div className="absolute inset-0 grid place-items-center">
           <div className="rounded-lg bg-black/40 px-4 py-2 text-xs text-stone-200 backdrop-blur">Loading MuJoCo + robot model…</div>

@@ -9,6 +9,8 @@ import { SPACECRAFT } from "../vehicles/spacecraft";
 import { vehicleById } from "../vehicles/library";
 import { engineModel, ispAt } from "./engines";
 import { flyLanding } from "./landing";
+import { aeroAreas, soundSpeed } from "./aero";
+import { TILES, Wall, radiativeEquilibriumK } from "./tps";
 
 const craft = (id: string) => structuredClone(SPACECRAFT.find((v) => v.id === id)!);
 
@@ -81,5 +83,63 @@ describe("landings", () => {
   it("parachute landers don't get a powered flight", () => {
     const v = vehicleById("venera13")!;
     expect(runExperiment(v, defaultScenario(v)).flight).toBeNull();
+  });
+});
+
+describe("aerodynamics", () => {
+  it("speed of sound in CO2: ~230 m/s on Mars (210 K), ~410 m/s at the Venus surface (735 K)", () => {
+    expect(soundSpeed(210)).toBeGreaterThan(220);
+    expect(soundSpeed(210)).toBeLessThan(240);
+    expect(soundSpeed(735)).toBeGreaterThan(395);
+    expect(soundSpeed(735)).toBeLessThan(425);
+  });
+
+  it("Falcon 9 falling tail-first: drag area ~15-25 m² (base + grid fins)", () => {
+    const g = craft("falcon9-b5").propulsion!.aero;
+    const sub = aeroAreas(g, 0, 0.5).cdA;
+    expect(sub).toBeGreaterThan(12);
+    expect(sub).toBeLessThan(25);
+    // Supersonic, the blunt base drags harder.
+    expect(aeroAreas(g, 0, 2).cdA).toBeGreaterThan(sub);
+  });
+
+  it("Starship belly-first: hundreds of m² of drag, lift-to-drag ~0.3-0.8 at a 60° entry", () => {
+    const g = craft("starship-v3").propulsion!.aero;
+    const flop = aeroAreas(g, 90, 0.3);
+    expect(flop.cdA).toBeGreaterThan(500);
+    expect(flop.cdA).toBeLessThan(900);
+    expect(flop.clA).toBeLessThan(1);
+    const entry = aeroAreas(g, 180 - 60, 10);
+    expect(entry.clA / entry.cdA).toBeGreaterThan(0.3);
+    expect(entry.clA / entry.cdA).toBeLessThan(0.8);
+  });
+});
+
+describe("entry heating and tiles", () => {
+  it("25 mm of silica tile under 35 kW/m² for 5 min: face near radiative balance, steel behind stays cool", () => {
+    const w = new Wall({ tile: { id: "li900", thicknessMm: 25 }, skin: { material: "ss316", thicknessMm: 4 } }, 220);
+    for (let t = 0; t < 300; t += 0.1) w.step(35_000, 210, 0.1);
+    const eq = radiativeEquilibriumK(35_000, TILES.li900.emissivity, 210);
+    expect(w.surfaceK).toBeGreaterThan(eq - 60);
+    expect(w.surfaceK).toBeLessThan(eq + 5);
+    expect(w.skinK).toBeLessThan(400);
+  });
+
+  it("Starship's tiles survive a Mars entry from orbit below their reuse limit; the steel behind stays cold", () => {
+    const f = flyLanding(craft("starship-v3"), { body: "mars", elevationM: -2600, fromKm: 125, lsDeg: 150 });
+    expect(f.peaks.heatWm2).toBeGreaterThan(10_000);
+    expect(f.peaks.surfaceK).toBeLessThan(TILES.li900.reuseK);
+    expect(f.peaks.skinK).toBeLessThan(373);
+  });
+
+  it("the Apollo LM can't enter Mars's air from orbit: its 0.6 mm aluminium burns through", () => {
+    const f = flyLanding(craft("apollo-lm"), { body: "mars", elevationM: -2600, fromKm: 125, lsDeg: 150 });
+    expect(f.outcome).toBe("burned");
+    expect(f.events.some((e) => e.title === "Burn-through")).toBe(true);
+  });
+
+  it("boosters fly an entry burn before meeting Mars's air", () => {
+    const f = flyLanding(craft("falcon9-b5"), { body: "mars", elevationM: -2600, fromKm: 125, lsDeg: 150 });
+    expect(f.events.some((e) => e.title === "Entry burn done")).toBe(true);
   });
 });

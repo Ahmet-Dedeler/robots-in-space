@@ -43,13 +43,26 @@ const starship: VehicleBuild = {
     propellantKg: 200_000,
     capacityKg: 1_600_000,
     tanks: { pressureBar: 6, collapseMarginBar: 0.3, volumeM3: 2_500, flood: false },
-    // Belly-first: ~50 m x 9 m broadside, Cd ~1.1 with the flaps. Tail-first: 64 m^2, Cd ~0.85. Approximation.
-    cdABellyM2: 500,
-    cdAM2: 55,
-    // Not published; a guess for a flat-bottomed body at a high angle of attack.
-    liftToDrag: 0.4,
+    aero: {
+      // ~52 m tall with the ogive nose; the cylinder plus most of the nose acts as ~50 m x 9 m in crossflow.
+      lengthM: 50,
+      diameterM: 9,
+      // Two aft + two forward flaps: ~110 m^2, measured on the 3D model (aft 11.9 x 3.4 m each, forward ~6.5 x 2.4 m). Not published.
+      fins: { areaM2: 110, facing: "normal" },
+      // Not published. Flight-test webcasts show a ~60° entry (belly down, nose up) and a ~90° belly flop
+      // in the subsonic skydive (SN8-SN15). Approximation.
+      belly: { entryAoADeg: 60, skydiveAoADeg: 90 },
+    },
+    tps: {
+      // ~18,000 hexagonal silica tiles on the windward half. Thickness unpublished: 25 mm is a guess.
+      // Skin: 4 mm stainless (early prototype rings; V3 not published).
+      windward: { tile: { id: "li900", thicknessMm: 25 }, skin: { material: "ss316", thicknessMm: 4 } },
+      base: { skin: { material: "ss316", thicknessMm: 4 } },
+      lee: { skin: { material: "ss316", thicknessMm: 4 } },
+      // Shadowed leeward steel: a few % of the windward flux (guess; it flies bare on Earth entry).
+      leeShare: 0.03,
+    },
     legs: { ratedMs: 3, breakMs: 8 },
-    heatShield: true,
   },
 };
 
@@ -86,10 +99,24 @@ const falcon9: VehicleBuild = {
     propellantKg: 20_000,
     capacityKg: 395_000,
     tanks: { pressureBar: 3.5, collapseMarginBar: 0.2, volumeM3: 380, flood: false },
-    // Tail-first: 10.5 m^2 x Cd ~1 plus four grid fins. Approximation.
-    cdAM2: 15,
+    aero: {
+      // First stage plus interstage (the 3D model: 48.7 m).
+      lengthM: 47.7,
+      diameterM: 3.66,
+      // Four titanium grid fins, ~1.5 m^2 each, facing the flow when it falls engines-first. Approximation.
+      fins: { areaM2: 6, facing: "axial" },
+    },
+    tps: {
+      // Al-Li tank walls, ~4.5 mm (not published, guess). The base carries a heat shield over the engines (type unpublished).
+      windward: { skin: { material: "al2219", thicknessMm: 4.5 } },
+      base: { tile: { id: "ceramicBlanket", thicknessMm: 20 }, skin: { material: "al2219", thicknessMm: 6 } },
+      lee: { skin: { material: "al2219", thicknessMm: 4.5 } },
+      // Flanks of a stage falling tail-first: a small share of the base's stagnation flux (guess).
+      leeShare: 0.05,
+    },
+    // Earth drone-ship returns: the entry burn ends around 1.3-1.6 km/s (webcast telemetry; SpaceX doesn't publish). Guess.
+    entryBurn: { targetMs: 1500, maxShare: 0.5 },
     legs: { ratedMs: 4, breakMs: 10 },
-    heatShield: false,
   },
 };
 
@@ -125,10 +152,20 @@ const newGlenn: VehicleBuild = {
     propellantKg: 60_000,
     capacityKg: 1_270_000,
     tanks: { pressureBar: 3.5, collapseMarginBar: 0.3, volumeM3: 1_560, flood: false },
-    // Tail-first: 38.5 m^2 plus aft fins and strakes. Approximation.
-    cdAM2: 45,
+    aero: {
+      lengthM: 57.5,
+      diameterM: 7,
+      // Four aft fins and two forward strakes (~40 m^2, guess): edge-on in a tail-first fall, they bite at an angle.
+      fins: { areaM2: 40, facing: "normal" },
+    },
+    tps: {
+      windward: { skin: { material: "al2219", thicknessMm: 6 } },
+      base: { tile: { id: "ceramicBlanket", thicknessMm: 20 }, skin: { material: "al2219", thicknessMm: 6 } },
+      lee: { skin: { material: "al2219", thicknessMm: 6 } },
+      leeShare: 0.05,
+    },
+    entryBurn: { targetMs: 1500, maxShare: 0.5 },
     legs: { ratedMs: 4, breakMs: 10 },
-    heatShield: false,
   },
 };
 
@@ -170,9 +207,16 @@ const apolloLm: VehicleBuild = {
     capacityKg: 8_248,
     // Titanium propellant tanks at ~16 bar (helium pressurant); stiff small shells.
     tanks: { pressureBar: 16, collapseMarginBar: 2, volumeM3: 12, flood: false },
-    cdAM2: 20,
+    // Not slender: 6.98 m tall, 4.22 m descent stage (Grumman LM news reference). Crude as a cylinder.
+    aero: { lengthM: 6.98, diameterM: 4.22 },
+    tps: {
+      // Never meant to meet air: thin aluminium under Kapton/Mylar blankets.
+      windward: { skin: { material: "al2219", thicknessMm: 0.6 } },
+      base: { skin: { material: "al2219", thicknessMm: 0.6 } },
+      lee: { skin: { material: "al2219", thicknessMm: 0.6 } },
+      leeShare: 0.05,
+    },
     legs: { ratedMs: 3, breakMs: 6 },
-    heatShield: false,
   },
 };
 

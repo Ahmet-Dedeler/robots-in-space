@@ -11,7 +11,8 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "bake:co2": "cd tools && uv run python bake_co2.py",
-    "bake:robots": "cd tools && uv run python bake_robots.py"
+    "bake:robots": "cd tools && uv run python bake_robots.py",
+    "bake:models": "sh tools/bake_models.sh"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",

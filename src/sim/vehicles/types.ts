@@ -12,6 +12,8 @@ import type {
 import type { MaterialId } from "../materials/materials";
 import type { PlanetScenario } from "../planets/world";
 import type { MachineModel } from "../robots/machines";
+import type { AeroGeometry } from "../spacecraft/aero";
+import type { WallSpec } from "../spacecraft/tps";
 import type { EngineId } from "../spacecraft/engines";
 
 /** How much to trust a model. Shown on every vehicle and result. */
@@ -59,15 +61,32 @@ export interface Propulsion {
     /** Vent the empty main tanks to the outside (no crushing, no buoyancy); landing propellant stays in small header tanks kept above ambient. */
     flood: boolean;
   };
-  /** Drag area falling engines-first [m^2]. */
-  cdAM2: number;
-  /** Drag area falling belly-first (Starship's skydive) [m^2]. Absent = always engines-first. */
-  cdABellyM2?: number;
-  /** Lift-to-drag ratio of a belly-first entry (bank-steered). Absent = ballistic. */
-  liftToDrag?: number;
+  /**
+   * Body and control-surface geometry for the aerodynamics (spacecraft/aero.ts):
+   * drag and lift follow the angle of attack and Mach number from these.
+   */
+  aero: AeroGeometry & {
+    /**
+     * Belly-first craft (Starship): angle of attack from the nose axis
+     * during the hypersonic entry and the subsonic skydive [deg]. Absent:
+     * the stage falls engines-first (boosters, 180°).
+     */
+    belly?: { entryAoADeg: number; skydiveAoADeg: number };
+  };
+  /**
+   * Thermal protection (spacecraft/tps.ts): the windward side (and nose),
+   * the engine base and the lee side, each tiles/blanket over a skin.
+   */
+  tps: {
+    windward: WallSpec;
+    base: WallSpec;
+    lee: WallSpec;
+    /** Lee-side heat flux as a share of the windward/base peak. */
+    leeShare: number;
+  };
+  /** Retro-burn on entering from orbit, for stages without a heat shield (Falcon 9's entry burn). */
+  entryBurn?: { targetMs: number; maxShare: number };
   legs: { ratedMs: number; breakMs: number };
-  /** Built to survive entry from orbit (Starship's tiles). Entry heating itself isn't simulated. */
-  heatShield: boolean;
 }
 
 export type RoverModel = "yutu" | "pragyan" | "mer" | "msl" | "lunokhod" | "crawler";

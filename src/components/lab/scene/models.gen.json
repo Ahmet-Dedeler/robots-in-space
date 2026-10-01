@@ -1,0 +1,663 @@
+{
+  "apollo-lm": {
+    "file": "/models/apollo-lm.glb",
+    "sizeM": [
+      8.949,
+      6.98,
+      8.95
+    ],
+    "pivots": {},
+    "tris": 79999,
+    "mb": 2.27,
+    "title": "Apollo Lunar Module",
+    "credit": "NASA",
+    "license": "NASA media usage guidelines (not copyrighted)",
+    "page": "https://github.com/nasa/NASA-3D-Resources/tree/master/3D%20Models/Apollo%20Lunar%20Module",
+    "scaleRef": "Apollo News Reference (Grumman): 22 ft 11 in tall, landing gear extended",
+    "checks": [
+      {
+        "what": "landing-gear span (footpad outer edges)",
+        "modelM": 8.949,
+        "publishedM": 9.45,
+        "ref": "Grumman LM news reference: 31 ft across the landing gear"
+      }
+    ]
+  },
+  "falcon9": {
+    "file": "/models/falcon9.glb",
+    "sizeM": [
+      4.367,
+      48.707,
+      4.367
+    ],
+    "pivots": {
+      "leg_0": [
+        1.498,
+        1.884,
+        -1.249
+      ],
+      "leg_1": [
+        -1.249,
+        1.884,
+        -1.498
+      ],
+      "leg_2": [
+        -1.498,
+        1.884,
+        1.249
+      ],
+      "leg_3": [
+        1.249,
+        1.884,
+        1.498
+      ]
+    },
+    "parts": {
+      "body": [
+        4.3671,
+        48.707,
+        4.3671
+      ],
+      "leg_0": [
+        1.8597,
+        9.3309,
+        2.1744
+      ],
+      "leg_1": [
+        2.1744,
+        9.3309,
+        1.8597
+      ],
+      "leg_2": [
+        1.8597,
+        9.3309,
+        2.1744
+      ],
+      "leg_3": [
+        2.1744,
+        9.3309,
+        1.8597
+      ]
+    },
+    "tris": 99998,
+    "mb": 3.55,
+    "title": "Falcon 9 (first stage)",
+    "credit": "Stanley Creative",
+    "license": "CC BY 4.0",
+    "page": "https://sketchfab.com/3d-models/394f7cf52d124bbd9db69f24d1ff2f08",
+    "scaleRef": "modelled in centimetres; its full stack is 71.0 m vs SpaceX's 70 m (+1.4%)",
+    "checks": [
+      {
+        "what": "first stage + interstage",
+        "modelM": 48.707,
+        "publishedM": 47.7,
+        "ref": "SpaceX Falcon 9: 41.2 m first stage plus ~6.5 m interstage (approximate split, not published exactly)"
+      }
+    ]
+  },
+  "lunokhod": {
+    "file": "/models/lunokhod.glb",
+    "sizeM": [
+      3.535,
+      3.386,
+      2.731
+    ],
+    "pivots": {
+      "wheel_L0": [
+        0.8581,
+        0.2536,
+        -0.9909
+      ],
+      "wheel_L1": [
+        0.2665,
+        0.2828,
+        -0.9909
+      ],
+      "wheel_L2": [
+        -0.3062,
+        0.2831,
+        -0.9909
+      ],
+      "wheel_L3": [
+        -0.8979,
+        0.2536,
+        -0.9909
+      ],
+      "wheel_R0": [
+        0.8577,
+        0.2538,
+        0.7943
+      ],
+      "wheel_R1": [
+        0.2656,
+        0.2823,
+        0.7943
+      ],
+      "wheel_R2": [
+        -0.3058,
+        0.2828,
+        0.7943
+      ],
+      "wheel_R3": [
+        -0.8984,
+        0.2546,
+        0.7943
+      ],
+      "lid": [
+        -1.0969,
+        1.2766,
+        -0.0972
+      ]
+    },
+    "parts": {
+      "body": [
+        3.0925,
+        2.2216,
+        2.7309
+      ],
+      "wheel_L0": [
+        0.5051,
+        0.5051,
+        0.3411
+      ],
+      "wheel_L1": [
+        0.5057,
+        0.5057,
+        0.3411
+      ],
+      "wheel_L2": [
+        0.5076,
+        0.5076,
+        0.3411
+      ],
+      "wheel_L3": [
+        0.5072,
+        0.5072,
+        0.3411
+      ],
+      "wheel_R0": [
+        0.5058,
+        0.5058,
+        0.3411
+      ],
+      "wheel_R1": [
+        0.5039,
+        0.5039,
+        0.3411
+      ],
+      "wheel_R2": [
+        0.5014,
+        0.5014,
+        0.3411
+      ],
+      "wheel_R3": [
+        0.5065,
+        0.5065,
+        0.3411
+      ],
+      "lid": [
+        0.6708,
+        2.1093,
+        2.1837
+      ]
+    },
+    "tris": 57754,
+    "mb": 2.84,
+    "title": "Lunokhod 1",
+    "credit": "sheffrator",
+    "license": "CC BY 4.0",
+    "page": "https://sketchfab.com/3d-models/3f5a5f02ad53447b9dff335e42d2469c",
+    "scaleRef": "wheel diameter 0.51 m (NSSDCA/Lavochkin): the model's wheels are 0.365 units across"
+  },
+  "mer": {
+    "file": "/models/mer.glb",
+    "sizeM": [
+      1.969,
+      1.599,
+      2.3
+    ],
+    "pivots": {
+      "rocker_R": [
+        0.0504,
+        0.3682,
+        0.3691
+      ],
+      "bogie_R": [
+        -0.4006,
+        0.3,
+        0.3421
+      ],
+      "steer_R0": [
+        0.5467,
+        0.1744,
+        0.5179
+      ],
+      "wheel_R0": [
+        0.5463,
+        0.1318,
+        0.5354
+      ],
+      "wheel_R1": [
+        -0.1717,
+        0.1319,
+        0.4794
+      ],
+      "steer_R2": [
+        -0.6765,
+        0.1744,
+        0.5179
+      ],
+      "wheel_R2": [
+        -0.6765,
+        0.1319,
+        0.5354
+      ],
+      "rocker_L": [
+        0.0504,
+        0.3682,
+        -0.3691
+      ],
+      "bogie_L": [
+        -0.4006,
+        0.3,
+        -0.3421
+      ],
+      "steer_L0": [
+        0.5467,
+        0.1744,
+        -0.5179
+      ],
+      "wheel_L0": [
+        0.5464,
+        0.1318,
+        -0.5354
+      ],
+      "wheel_L1": [
+        -0.1717,
+        0.1319,
+        -0.4794
+      ],
+      "steer_L2": [
+        -0.6765,
+        0.1616,
+        -0.5244
+      ],
+      "wheel_L2": [
+        -0.6765,
+        0.1319,
+        -0.5354
+      ],
+      "mast": [
+        0.3118,
+        0.9125,
+        0.0241
+      ]
+    },
+    "tris": 29710,
+    "mb": 1.9,
+    "title": "Opportunity rover (MER-B)",
+    "credit": "NASA/JPL-Caltech",
+    "license": "NASA media usage guidelines (not copyrighted)",
+    "page": "https://github.com/nasa/NASA-3D-Resources/tree/master/3D%20Models/Mars%20Exploration%20Rover%20-%20Spirit%20and%20Opportunity",
+    "scaleRef": "NASA MER fact sheet: 2.3 m wide (solar wings)",
+    "checks": [
+      {
+        "what": "height",
+        "modelM": 1.599,
+        "publishedM": 1.5,
+        "ref": "NASA: 1.5 m high (Pancam mast)"
+      },
+      {
+        "what": "length",
+        "modelM": 1.969,
+        "publishedM": 1.6,
+        "ref": "NASA: 1.6 m long"
+      }
+    ]
+  },
+  "msl": {
+    "file": "/models/msl.glb",
+    "sizeM": [
+      3.924,
+      2.2,
+      2.762
+    ],
+    "pivots": {
+      "rocker_L": [
+        -0.0986,
+        0.8788,
+        -0.793
+      ],
+      "bogie_L": [
+        -0.8461,
+        0.6412,
+        -0.9843
+      ],
+      "steer_L0": [
+        0.7777,
+        0.6379,
+        -1.055
+      ],
+      "wheel_L0": [
+        0.7778,
+        0.2404,
+        -1.0554
+      ],
+      "wheel_L1": [
+        -0.3975,
+        0.2433,
+        -1.1849
+      ],
+      "steer_L2": [
+        -1.4667,
+        0.6406,
+        -1.0544
+      ],
+      "wheel_L2": [
+        -1.4655,
+        0.2433,
+        -1.0549
+      ],
+      "rocker_R": [
+        -0.0961,
+        0.8815,
+        0.7925
+      ],
+      "bogie_R": [
+        -0.8461,
+        0.6412,
+        0.9843
+      ],
+      "steer_R0": [
+        0.7802,
+        0.6406,
+        1.0544
+      ],
+      "wheel_R0": [
+        0.7801,
+        0.2432,
+        1.0548
+      ],
+      "wheel_R1": [
+        -0.3975,
+        0.2433,
+        1.1849
+      ],
+      "steer_R2": [
+        -1.4667,
+        0.6406,
+        1.0544
+      ],
+      "wheel_R2": [
+        -1.468,
+        0.2433,
+        1.0549
+      ],
+      "mast": [
+        0.4027,
+        1.2202,
+        0.5528
+      ],
+      "hga": [
+        -0.852,
+        1.3579,
+        -0.4747
+      ]
+    },
+    "tris": 48384,
+    "mb": 2.89,
+    "title": "Curiosity rover (MSL)",
+    "credit": "NASA/JPL-Caltech",
+    "license": "NASA media usage guidelines (not copyrighted)",
+    "page": "https://github.com/nasa/NASA-3D-Resources/tree/master/3D%20Models/Curiosity%20Rover%20(MSL)",
+    "scaleRef": "NASA MSL fact sheet: 2.2 m tall at the mast top",
+    "checks": [
+      {
+        "what": "width",
+        "modelM": 2.762,
+        "publishedM": 2.8,
+        "ref": "NASA: 2.8 m wide"
+      },
+      {
+        "what": "length incl. stowed arm",
+        "modelM": 3.924,
+        "publishedM": 3.0,
+        "ref": "NASA: ~3 m long (body); the arm turret sticks out further"
+      }
+    ]
+  },
+  "newglenn": {
+    "file": "/models/newglenn.glb",
+    "sizeM": [
+      11.037,
+      57.5,
+      11.603
+    ],
+    "pivots": {
+      "engine_0": [
+        0.0,
+        0.0,
+        0.0585
+      ],
+      "engine_1": [
+        0.0,
+        0.0,
+        2.5226
+      ],
+      "engine_2": [
+        2.2335,
+        0.0,
+        1.2617
+      ],
+      "engine_3": [
+        -0.0,
+        0.0,
+        -2.5226
+      ],
+      "engine_4": [
+        2.2335,
+        0.0,
+        -1.2617
+      ],
+      "engine_5": [
+        -2.2335,
+        0.0,
+        1.2617
+      ],
+      "engine_6": [
+        -2.2335,
+        0.0,
+        -1.2617
+      ]
+    },
+    "parts": {
+      "body": [
+        11.0374,
+        57.1613,
+        11.6027
+      ],
+      "engine_0": [
+        2.3444,
+        4.6122,
+        2.4603
+      ],
+      "engine_1": [
+        2.3444,
+        4.6122,
+        2.4603
+      ],
+      "engine_2": [
+        2.3444,
+        4.6122,
+        2.4603
+      ],
+      "engine_3": [
+        2.3444,
+        4.6122,
+        2.4603
+      ],
+      "engine_4": [
+        2.3444,
+        4.6122,
+        2.4603
+      ],
+      "engine_5": [
+        2.3444,
+        4.6122,
+        2.4603
+      ],
+      "engine_6": [
+        2.3444,
+        4.6122,
+        2.4603
+      ]
+    },
+    "tris": 92668,
+    "mb": 3.39,
+    "title": "Blue Origin New Glenn (GS1)",
+    "credit": "Clarence365",
+    "license": "CC BY 4.0",
+    "page": "https://sketchfab.com/3d-models/60e49f5c126841469b7e5b97517e5271",
+    "scaleRef": "Blue Origin: first stage 57.5 m",
+    "checks": [
+      {
+        "what": "diameter incl. fins/strakes",
+        "modelM": 11.603,
+        "publishedM": 7.0,
+        "ref": "Blue Origin: 7 m body"
+      }
+    ]
+  },
+  "starship": {
+    "file": "/models/starship.glb",
+    "sizeM": [
+      9.212,
+      52.1,
+      16.176
+    ],
+    "pivots": {
+      "flap_aft_L": [
+        0.0842,
+        6.0337,
+        -4.7145
+      ],
+      "flap_aft_R": [
+        0.0842,
+        6.0337,
+        4.7145
+      ],
+      "flap_fwd_L": [
+        -1.9211,
+        44.8214,
+        -2.5402
+      ],
+      "flap_fwd_R": [
+        -1.9211,
+        44.8214,
+        2.5402
+      ],
+      "engine_0": [
+        -0.5768,
+        0.3674,
+        -0.0189
+      ],
+      "engine_1": [
+        0.5499,
+        0.3674,
+        -0.7266
+      ],
+      "engine_2": [
+        0.5499,
+        0.3674,
+        0.6148
+      ],
+      "engine_vac_0": [
+        -1.5274,
+        0.0011,
+        -2.7582
+      ],
+      "engine_vac_1": [
+        3.2619,
+        0.0011,
+        0.013
+      ],
+      "engine_vac_2": [
+        -1.514,
+        0.0011,
+        2.7586
+      ]
+    },
+    "parts": {
+      "body": [
+        9.2121,
+        52.1,
+        10.9693
+      ],
+      "flap_aft_L": [
+        0.7445,
+        11.8981,
+        3.3735
+      ],
+      "flap_aft_R": [
+        0.7445,
+        11.8981,
+        3.3735
+      ],
+      "flap_fwd_L": [
+        2.5504,
+        6.5391,
+        4.7932
+      ],
+      "flap_fwd_R": [
+        2.5504,
+        6.5391,
+        4.7932
+      ],
+      "engine_0": [
+        1.2298,
+        2.758,
+        1.245
+      ],
+      "engine_1": [
+        1.2298,
+        2.758,
+        1.245
+      ],
+      "engine_2": [
+        1.2298,
+        2.758,
+        1.245
+      ],
+      "engine_vac_0": [
+        2.363,
+        4.4281,
+        2.363
+      ],
+      "engine_vac_1": [
+        2.3611,
+        4.4281,
+        2.3611
+      ],
+      "engine_vac_2": [
+        2.3988,
+        4.4281,
+        2.3721
+      ]
+    },
+    "tris": 159993,
+    "mb": 7.35,
+    "title": "SpaceX Starship Block 3 (ship)",
+    "credit": "Clarence365",
+    "license": "CC BY 4.0",
+    "page": "https://sketchfab.com/3d-models/6f6c6f88a3eb4b4d822fdca66733fbb2",
+    "scaleRef": "SpaceX: V3 stack 124.4 m minus the 72.3 m Super Heavy V3 = ~52.1 m ship",
+    "checks": [
+      {
+        "what": "body diameter (incl. flaps, so wider)",
+        "modelM": 16.176,
+        "publishedM": 9.0,
+        "ref": "SpaceX: 9 m"
+      }
+    ]
+  }
+}
