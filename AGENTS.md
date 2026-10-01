@@ -22,7 +22,9 @@ Browser sandbox for physics experiments on other worlds: drop a robot, rover, la
   - `mission/run.ts`: runs an experiment and returns the series, events and verdict
   - `planets/`: Moon, Mars, Mercury. `world.ts` is the environment the mission loop talks to (Venus is a pass-through to VIRA); `regolith.ts` ground temperatures, `solar.ts` the Sun, `mars.ts` Mars air/dust, `cold.ts` cold limits
   - `robots/policy.ts`: Unitree walking policy (LSTM + MLP) ported to TS
-  - `robots/robot-world.ts`, `robots/skidsteer-world.ts`: MuJoCo worlds (terrain heightfield, buoyancy, spec mass, plastic hinges), shared by the browser and Node tests
+  - `robots/robot-world.ts`, `robots/machine-world.ts`: MuJoCo worlds (terrain heightfield, buoyancy, spec mass, plastic hinges), shared by the browser and Node tests
+  - `robots/machines.ts`: Cat skid steer, track loader, D6 dozer, 320 excavator and NASA IPEx as MuJoCo definitions (spec-sheet geometry, hydraulic implements, work cycles). Their 3D models are in `components/lab/scene/machine-models.ts`; see `docs/machines.md`
+  - `spacecraft/`: rocket landers. `engines.ts` is thrust vs outside pressure (nozzle equations, flow separation), `landing.ts` the powered descent (entry, braking, hoverslam, tank crush, legs). Presets in `vehicles/spacecraft.ts`, 3D in `components/lab/scene/SpacecraftView.tsx`; see `docs/spacecraft.md`
   - `terrain/terrain.ts`: the Venera-derived ground. It is one function used for both collision and rendering, so never render terrain from anything else
 - `src/components/lab/` is the UI: panels, uPlot charts, and the R3F scene. MuJoCo runs through the official `@mujoco/mujoco` WASM bindings.
 - `src/lib/lab-store.ts`: zustand store (config, result, playback, share links).
@@ -33,7 +35,8 @@ Browser sandbox for physics experiments on other worlds: drop a robot, rover, la
 
 - Every number in `sim/` needs a source or an explicit "guess"/"calibrated" note next to it. Keep the fidelity labels (validated / calibrated / approximation / hypothetical) honest.
 - Don't break the validation tests (`pnpm test`): Venera 13 descent (~1 h, ~7.5 m/s) and surface survival (127 min ±25%), plus TS policy parity with PyTorch. If a model change moves Venera, recalibrate and say so in the vehicle notes.
-- Same for the other worlds (`sim/planets/planets.test.ts`): Diviner lunar temperatures, Mercury hot/warm longitudes, Pragyan dies in its first night, Yutu-2 wakes up, Curiosity survives the 2018 storm, Opportunity doesn't.
+- Same for the other worlds (`sim/planets/planets.test.ts`): Diviner lunar temperatures, Mercury hot/warm longitudes, Pragyan dies in its first night, Yutu-2 wakes up, Lunokhod 1 freezes around day 300 as its Po-210 fades, Curiosity survives the 2018 storm, Opportunity doesn't.
+- Same for rockets (`sim/spacecraft/spacecraft.test.ts`): Merlin's 311 s vacuum Isp from its sea-level point, Apollo LM lands from 15 km with propellant to spare, Starship's tanks crush 30-40 km up on Venus.
 - Keep Venus bit-identical when touching `planets/`: the `World` for Venus must not change any Venus number.
 - Mutable engine objects (MuJoCo model/data, three.js objects touched per frame) live in refs, not React state or memo. The React Compiler lint rules enforce this.
 - Colors for chart series are fixed per part role (`ROLE_COLOR`). Never cycle them.

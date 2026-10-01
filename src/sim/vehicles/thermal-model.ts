@@ -154,10 +154,10 @@ export function buildThermalModel(b: VehicleBuild, batteryWhPerKg: number, insul
 
   if (b.tires) {
     const m = MATERIALS[b.tires.material];
-    // Tyres are thin-walled toroids: lots of area per kg, fully exposed.
+    // Tyres are thin-walled toroids and track shoes thin plates: lots of area per kg, fully exposed.
     const area = compactArea(b.tires.massKg, m.density, 6);
     const tires = add("tires", {
-      label: `Tyres (${m.name})`,
+      label: `${b.tires.kind === "tracks" ? "Tracks" : "Tyres"} (${m.name})`,
       C: b.tires.massKg * m.cp,
       exposure: { area, emissivity: m.emissivity, lengthM: 0.4, convFactor: 1, seriesR: 0 },
     });

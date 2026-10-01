@@ -73,6 +73,44 @@ const yutu2: VehicleBuild = {
   home: { body: "moon", siteId: "change4", localHour: 8, lsDeg: 0, dustTau: 0 },
 };
 
+const lunokhod1: VehicleBuild = {
+  id: "lunokhod1",
+  name: "Lunokhod 1 (Luna 17, 1970-71)",
+  tagline: "The first rover on another world. Drove 10.5 km until its polonium heater faded.",
+  fidelity: "calibrated",
+  notes: [
+    "Soviet specs: 756 kg (some sources give 840 kg, Lunokhod 2's mass), 1.35 m high, 1.7 m long, 1.6 m wide, eight independently driven wire-mesh wheels, two speeds (~0.8 and ~2 km/h), 180 W solar array on the inside of a hinged lid.",
+    "A sealed magnesium-alloy tub held the electronics in pressurised gas that fans circulated past radiators. At night the lid closed over the tub and a polonium-210 heat source kept the inside warm.",
+    "Po-210 has a 138-day half-life. Designed for three lunar days, Lunokhod 1 ran eleven (Nov 1970 to Sep 1971, 10.54 km) and stopped when the heat source had faded too far to carry it through the night.",
+    "Heat-source power, insulation and battery are not published in detail. A 1.3 kW source (behind a thermostatic valve, like the real gas loop) reproduces the end: nights get colder from the seventh on, and the electronics freeze around day 300 (real: last contact on day 301). Calibration, not prediction.",
+  ],
+  // 10.54 km in ~11 lunar days of driving at ~0.8 km/h.
+  mechanics: { kind: "rover", model: "lunokhod", speedMs: 0.22, dutyCycle: 0.0042 },
+  massKg: 756,
+  exteriorAreaM2: 9,
+  charLengthM: 1.6,
+  skin: { material: "az31", massKg: 30, emissivity: 0.8, absorptivity: 0.3 },
+  frame: { material: "az31", massKg: 120, loadFraction: 0.2 },
+  enclosure: { kind: "sealed", hull: { material: "az31", radiusM: 0.75, thicknessMm: 3 }, seal: "viton", internalH: 3 },
+  insulation: { material: "vacuumMli", thicknessMm: 25 },
+  // The radiator ring around the top of the tub (closed by the lid at night).
+  radiator: { areaM2: 1.5, openAboveK: cToK(15) },
+  electronics: { part: "siMilitary", solder: "snpb", massKg: 80, powerW: 60 },
+  battery: { part: "silverZinc", capacityWh: 3000 },
+  motors: { magnet: "ndfebSH", winding: "polyimide", lubricant: "mos2", massKg: 40, electricW: 10, heatFraction: 0.4, sizeFactor: 1 },
+  camera: "hardened",
+  // ~180 W at noon from the lid's cells.
+  solar: { areaM2: 1.4, efficiency: 0.12, mount: "horizontal" },
+  hibernate: { sleepW: 0 },
+  // ~9 g of Po-210 (140 W/g). Tuned: see notes.
+  rhuW: 1300,
+  rhuHalfLifeDays: 138.4,
+  rhuValveK: cToK(5),
+  payloadMassKg: 200,
+  initialTempK: cToK(20),
+  home: { body: "moon", siteId: "lunokhod1", localHour: 8, lsDeg: 0, dustTau: 0, maxDays: 330 },
+};
+
 const curiosity: VehicleBuild = {
   id: "curiosity",
   name: "Curiosity rover (MSL, 2012-)",
@@ -171,4 +209,4 @@ const dawnCrawler: VehicleBuild = {
   home: { body: "mercury", siteId: "mercury70N", localHour: 7, lsDeg: 0, dustTau: 0, chaseSun: true },
 };
 
-export const PLANETARY_VEHICLES: VehicleBuild[] = [pragyan, yutu2, curiosity, opportunity, dawnCrawler];
+export const PLANETARY_VEHICLES: VehicleBuild[] = [lunokhod1, pragyan, yutu2, curiosity, opportunity, dawnCrawler];

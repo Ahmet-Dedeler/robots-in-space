@@ -25,6 +25,7 @@ import { VEHICLES } from "@/sim/vehicles/library";
 import type { VehicleBuild } from "@/sim/vehicles/types";
 import { FidelityBadge, Section, Segmented, SelectField, SliderField } from "./controls";
 import { HomeTag, PlanetSiteSection, SurvivalKitSection, WorldPicker, vehiclesFor } from "./PlanetControls";
+import { RocketSection, RocketStart } from "./RocketControls";
 
 const opts = <T extends Record<string, { id: string; name: string }>>(db: T) =>
   Object.values(db).map((p) => ({ value: p.id as keyof T & string, label: p.name }));
@@ -117,6 +118,7 @@ export function ConfigPanel() {
             hint="Venera measured 0.3-1 m/s"
             onChange={(v) => updateScenario({ windMs: v })}
           />
+          {b.propulsion && <RocketStart />}
           {b.descent && (
             <Segmented
               value={sc.start.kind}
@@ -131,7 +133,7 @@ export function ConfigPanel() {
             <Segmented
               value={sc.activity}
               options={[
-                { value: "walking", label: humanoid ? "Walking" : "Driving" },
+                { value: "walking", label: humanoid ? "Walking" : "Working" },
                 { value: "idle", label: humanoid ? "Standing" : "Parked" },
               ]}
               onChange={(a) => updateScenario({ activity: a })}
@@ -202,6 +204,8 @@ export function ConfigPanel() {
         />
       </Section>
 
+      {b.propulsion && <RocketSection />}
+
       {sc.planet && <SurvivalKitSection />}
 
       {b.enclosure.kind === "sealed" && (
@@ -269,9 +273,10 @@ export function ConfigPanel() {
           label="Battery capacity"
           value={b.battery.capacityWh}
           min={100}
-          max={10000}
-          step={50}
-          format={(v) => (v >= 1000 ? `${(v / 1000).toFixed(1)} kWh` : `${v.toFixed(0)} Wh`)}
+          // Heavy machines carry traction packs of hundreds of kWh.
+          max={b.powerplant ? 400_000 : 10_000}
+          step={b.powerplant ? 1000 : 50}
+          format={(v) => (v >= 1000 ? `${(v / 1000).toFixed(v >= 100_000 ? 0 : 1)} kWh` : `${v.toFixed(0)} Wh`)}
           onChange={(v) => update((x) => ({ ...x, battery: { ...x.battery, capacityWh: v } }))}
         />
         {b.camera && (
@@ -290,18 +295,18 @@ export function ConfigPanel() {
             onChange={(k) =>
               update((x) => ({
                 ...x,
-                powerplant: { kind: k, powerKw: x.powerplant?.powerKw ?? 55 },
-                // An electric conversion needs a traction pack instead of a 12 V starter battery.
-                battery: k === "electric" ? { part: "lfp", capacityWh: 60000 } : { part: "leadAcid", capacityWh: 1100 },
+                powerplant: { ...(x.powerplant ?? { powerKw: 55 }), kind: k },
+                // An electric conversion needs a traction pack instead of the starter battery.
+                battery: k === "electric" ? { part: "lfp", capacityWh: x.powerplant?.electricPackWh ?? 60_000 } : { part: "leadAcid", capacityWh: x.powerplant?.powerKw && x.powerplant.powerKw > 100 ? 2400 : 1100 },
               }))
             }
           />
           {b.tires && (
             <SelectField
-              label="Tyres / wheels"
+              label={b.tires.kind === "tracks" ? "Tracks" : "Tyres / wheels"}
               value={b.tires.material}
               options={matOpts(Object.values(MATERIALS).filter((m) => ["tireRubber", "silicone", "steel4140", "ti64", "inconel625"].includes(m.id)))}
-              hint={MATERIALS[b.tires.material].kind === "metal" ? "Rigid metal wheels: no rubber to lose" : undefined}
+              hint={MATERIALS[b.tires.material].kind === "metal" ? (b.tires.kind === "tracks" ? "Steel shoes: no rubber to lose" : "Rigid metal wheels: no rubber to lose") : undefined}
               onChange={(m) => update((x) => ({ ...x, tires: x.tires && { ...x.tires, material: m } }))}
             />
           )}

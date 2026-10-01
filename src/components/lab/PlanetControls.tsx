@@ -14,6 +14,7 @@ import { fmtHour, type PlanetScenario } from "@/sim/planets/world";
 import { TERRAINS, terrainsFor, type TerrainId } from "@/sim/terrain/terrain";
 import type { VehicleBuild } from "@/sim/vehicles/types";
 import { Section, Segmented, SelectField, SliderField } from "./controls";
+import { RocketStart } from "./RocketControls";
 
 const WORLDS: BodyId[] = ["venus", "moon", "mars", "mercury"];
 
@@ -52,12 +53,13 @@ export function WorldPicker() {
 
 /** Vehicles built for this world first, then everything else (droppable anywhere). */
 export function vehiclesFor<T extends VehicleBuild>(list: T[], body: BodyId): T[] {
-  const home = (v: VehicleBuild) => v.home?.body ?? "venus";
+  const home = (v: VehicleBuild) => (v.builtFor ? null : (v.home?.body ?? "venus"));
   return [...list.filter((v) => home(v) === body), ...list.filter((v) => home(v) !== body)];
 }
 
 export function HomeTag({ v }: { v: VehicleBuild }) {
   const body = useLab((s) => bodyOf(s.config.scenario));
+  if (v.builtFor) return <span className="shrink-0 text-[10px] text-stone-500">built for {v.builtFor}</span>;
   const home = v.home?.body ?? "venus";
   if (home === body) return null;
   return <span className="shrink-0 text-[10px] text-stone-500">built for {BODIES[home].name}</span>;
@@ -85,7 +87,7 @@ export function PlanetSiteSection() {
   const site = siteById(planet.siteId)!;
   const setPlanet = (p: Partial<PlanetScenario>) => updateScenario({ planet: { ...planet, ...p } });
   const mech = build.mechanics;
-  const mobile = mech.kind !== "static";
+  const mobile = mech.kind !== "static" && mech.kind !== "spacecraft";
   const sun = sunAt({ body, site, lsDeg: planet.lsDeg }, 0);
   const speed = mech.kind === "rover" ? mech.speedMs : mech.kind === "humanoid" ? 0.5 : mech.kind === "wheeled" ? 0.5 : 0;
   const vTerm = terminatorSpeed({ body, site, lsDeg: planet.lsDeg });
@@ -163,6 +165,7 @@ export function PlanetSiteSection() {
           />
         </>
       )}
+      {mech.kind === "spacecraft" && <RocketStart />}
       {mobile && (
         <Segmented
           value={sc.activity}

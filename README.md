@@ -23,7 +23,8 @@ Everything runs client-side. On Venus:
 - **Buoyancy**: MuJoCo's fluid model has none, so it's applied per body from the displaced solid volume. Open bodies are flooded with CO₂, so only their solid material counts.
 - **Bending metal**: thighs and shins are cut and rejoined with elastic-perfectly-plastic hinges. Their plastic moment follows the frame's hot yield strength, so limbs bend under load and stay bent.
 - **Optics**: spectral Rayleigh extinction for CO₂ at the local density (visibility ~1 km in green, less in blue), cloud-deck Mie haze, and purely diffuse light (3–3.5 klux measured by Venera 13/14; no direct sunbeam reaches the ground).
-- **Vehicles**: a CAT 262D3 skid steer from the official specs. Its diesel can't run (no oxygen). The battery-electric conversion drives until its ECU, tyres and hydraulics give out.
+- **Machines**: Cat 262D3 skid steer, 299D3 compact track loader, D6 dozer and 320 excavator from the official spec sheets, simulated in MuJoCo with hydraulic implements and real work cycles (dozing, digging and swinging to dump). Their diesels can't run (no oxygen); the battery-electric conversions work until their ECUs, rubber and hydraulics give out. Plus a Venus-hardened D6 concept and NASA's IPEx lunar excavator. Details in [docs/machines.md](docs/machines.md).
+- **Spacecraft**: Starship V3, a Falcon 9 booster, a New Glenn booster and the Apollo LM fly a powered landing on any of the four worlds: gravity turn from orbit on the Moon and Mercury, a lifting entry and retropropulsion on Mars, a belly-flop through Venus's clouds. Engine thrust comes from the nozzle equations with flow separation, so a Merlin is nearly useless at Venus's 92 bar and Raptor keeps about half its thrust. Thin pressure-stabilised tanks get crushed by the air. Details in [docs/spacecraft.md](docs/spacecraft.md).
 
 On the Moon, Mars and Mercury (details in [docs/planets.md](docs/planets.md)):
 
@@ -41,6 +42,7 @@ On the Moon, Mars and Mercury (details in [docs/planets.md](docs/planets.md)):
 | Venera 13 descent time (62 km → surface) | ~1 h | 66 min |
 | Venera 13 touchdown speed | ~7.5 m/s | 7.0 m/s |
 | Venera 13 surface survival | 127 min | ~2.1 h (calibrated) |
+| Lunokhod 1 end of mission (Po-210 heater fading) | day 301, 10.54 km | day ~306, 10.6 km (calibrated) |
 | Walking policy, TS vs PyTorch | identical | matches to 1e-4 |
 | Walking on Venus (gravity, 65 kg/m³ CO₂, buoyancy, spec mass) | — | flat ground: both walk; Venera plates: Optimus-class walks, G1 trips after ~2–7 s (blind policy trained on flat ground); Venera 9 boulder slope: all trip within ~3 s. See `src/sim/data/walking.json` |
 
@@ -50,6 +52,8 @@ On the Moon, Mars and Mercury (details in [docs/planets.md](docs/planets.md)):
 | Yutu-2 lunar nights | wakes every time | 3 of 3 |
 | Opportunity in the 2018 dust storm (τ 10.8) | silent ~11 sols in | dead in ~12 sols |
 | Curiosity in the same storm | fine | fine |
+| Apollo 11 powered descent (15 km orbit → Tranquility Base) | 12.6 min, ~45 s of fuel left | ~8 min, 1.3 t left (simpler, greedier guidance) |
+| Merlin 1D vacuum Isp (from its sea-level point) | 311 s | 311 s |
 
 Venera 13's hull, insulation and heat-sink details aren't published, so its model is **calibrated** to reproduce the 127 minutes, not predicted. Every vehicle is labelled with its fidelity.
 

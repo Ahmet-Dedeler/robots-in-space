@@ -287,6 +287,17 @@ const MATERIAL_TABLE = {
     emissivity: 0.95,
     pcm: { meltK: 273.15, latentJkg: 334_000 },
   },
+  eicosane: {
+    id: "eicosane",
+    name: "n-Eicosane wax (PCM)",
+    kind: "pcm",
+    density: 856,
+    cp: 2200,
+    k: 0.15,
+    emissivity: 0.9,
+    pcm: { meltK: 309.8, latentJkg: 247_000 },
+    notes: "Paraffin heat sink flown on spacecraft and planned for lunar rovers. Melts at 36.6 °C (Humphries & Griggs, NASA TP-1074, 1977).",
+  },
   // ---- More metals ---------------------------------------------------------------
   ti6242: {
     id: "ti6242",

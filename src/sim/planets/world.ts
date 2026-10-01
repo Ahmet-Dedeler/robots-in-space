@@ -173,6 +173,8 @@ class PlanetWorld implements World {
   readonly maxDurationS: number;
   readonly canRecover: boolean;
   private readonly clock: SolarClock;
+  /** Time since the start of the run [s] (heater isotopes decay with it). */
+  private elapsedS = 0;
   private readonly surface: PeriodicSolution;
   private readonly build: VehicleBuild;
   private readonly elevationM: number;
@@ -348,7 +350,14 @@ class PlanetWorld implements World {
     }
     // Radioisotope heater units: split between the electronics bay and the battery.
     const inside = [R.electronics, R.battery].filter((i): i is number => i !== undefined);
-    if (b.rhuW && inside.length) for (const i of inside) Q[i] += b.rhuW / inside.length;
+    if (b.rhuW && inside.length) {
+      const w = b.rhuW * (b.rhuHalfLifeDays ? Math.pow(0.5, this.elapsedS / (b.rhuHalfLifeDays * 86_400)) : 1);
+      // Valve (2 K band): warm inside -> the heat goes to the shell and leaves.
+      const warm = inside.reduce((m, i) => m + T[i], 0) / inside.length;
+      const routed = b.rhuValveK === undefined ? 1 : Math.min(1, Math.max(0, (b.rhuValveK + 1 - warm) / 2));
+      for (const i of inside) Q[i] += (w * routed) / inside.length;
+      if (R.skin !== undefined) Q[R.skin] += w * (1 - routed);
+    }
     // RTG waste heat piped into the body (the run loop already put all of it on the shell).
     if (b.rtg?.interiorFraction && R.skin !== undefined && inside.length) {
       const w = b.rtg.thermalW * b.rtg.interiorFraction;
@@ -461,12 +470,13 @@ class PlanetWorld implements World {
       const m = MATERIAL_BRITTLE[b.tires.material];
       if (m && R.tires !== undefined && T[R.tires] < m.brittleK && once("tires", "failed")) {
         this.tiresBroken = true;
-        emit("fail", "Tyres glassy", `${MATERIALS[b.tires.material].name} at ${C(T[R.tires])}. ${m.note}`, "tires");
+        emit("fail", b.tires.kind === "tracks" ? "Tracks brittle" : "Tyres glassy", `${MATERIALS[b.tires.material].name} at ${C(T[R.tires])}. ${m.note}`, "tires");
       }
     }
   }
 
   advance(dt: number, groundSpeedMs: number, alive: boolean, emit: Emit) {
+    this.elapsedS += dt;
     // Chasing the Sun: driving west at v against a terminator moving at V
     // slows the local clock to (1 - v/V).
     let rate = 1;

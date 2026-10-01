@@ -25,8 +25,11 @@ function Metric({ label, value, sub }: { label: string; value: string; sub?: str
   );
 }
 
+const fmtKg = (kg: number) => (kg >= 1000 ? `${(kg / 1000).toFixed(kg >= 10_000 ? 0 : 1)} t` : `${Math.round(kg)} kg`);
+
 function surfaceTime(r: RunResult) {
   const { deathS, landedS } = r.verdict;
+  if (r.flight?.destroyedS != null) return r.flight.outcome === "crushed" ? "crushed" : "crashed";
   if (landedS === null) return "never landed";
   if (deathS === null) return `> ${formatDuration(r.durationS - landedS)}`;
   return formatDuration(Math.max(0, deathS - landedS));
@@ -68,11 +71,17 @@ function Verdict() {
         </div>
       </div>
       <div className="grid grid-cols-3 gap-2">
-        <Metric label="On surface" value={surfaceTime(result)} sub={v.walkStopS !== null ? `${result.build.mechanics.kind === "wheeled" ? "drove" : "walked"} ${formatDuration(Math.max(0, v.walkStopS - (v.landedS ?? 0)))}` : undefined} />
+        <Metric label="On surface" value={surfaceTime(result)} sub={v.walkStopS !== null ? `${result.build.mechanics.kind === "wheeled" && result.build.mechanics.model === "excavator" ? "worked" : result.build.mechanics.kind === "humanoid" ? "walked" : "drove"} ${formatDuration(Math.max(0, v.walkStopS - (v.landedS ?? 0)))}` : undefined} />
         <Metric
           label="Descent"
-          value={v.landedS ? formatDuration(v.landedS) : "—"}
-          sub={v.touchdownMs ? `touchdown ${v.touchdownMs.toFixed(1)} m/s` : "started on surface"}
+          value={v.landedS ? formatDuration(v.landedS) : result.flight ? "never landed" : "—"}
+          sub={
+            result.flight
+              ? `${v.touchdownMs !== null ? `${v.touchdownMs.toFixed(1)} m/s · ` : ""}${fmtKg(result.flight.propellantLeftKg)} propellant left`
+              : v.touchdownMs
+                ? `touchdown ${v.touchdownMs.toFixed(1)} m/s`
+                : "started on surface"
+          }
         />
         <Metric label="First failure" value={v.firstFailure ? fmtClock(v.firstFailure.t) : "none"} sub={v.firstFailure?.title} />
       </div>
@@ -157,7 +166,14 @@ function Notes() {
       <div>
         <h4 className="mb-1 text-[11px] tracking-wide text-stone-500 uppercase">How this is computed</h4>
         {planet ? (
-          <PlanetModelNotes />
+          <>
+            <PlanetModelNotes />
+            {build.propulsion && (
+              <ul className="mt-1 list-disc space-y-1 pl-4 text-stone-400">
+                <RocketModelNote />
+              </ul>
+            )}
+          </>
         ) : (
         <ul className="list-disc space-y-1 pl-4 text-stone-400">
           <li>Atmosphere: VIRA reference profiles (Seiff et al. 1985); real-gas CO₂ properties from CoolProp (supercritical near the surface).</li>
@@ -168,10 +184,23 @@ function Notes() {
           <li>Bending: thighs and shins are split by elastic-perfectly-plastic hinges whose plastic moment follows the frame&apos;s hot yield strength, so limbs bend and stay bent.</li>
           <li>Optics: spectral Rayleigh extinction of CO₂ at the local density, cloud-deck Mie extinction, diffuse-only light (no direct sunbeam reaches the surface).</li>
           <li>Descent: quasi-steady terminal velocity through the VIRA density profile.</li>
+          {build.propulsion && <RocketModelNote />}
         </ul>
         )}
       </div>
     </div>
+  );
+}
+
+function RocketModelNote() {
+  return (
+    <li>
+      Powered landing: a 2-D point mass with gravity, the centrifugal term of orbital speed, drag, buoyancy and thrust. Engine thrust follows the ideal
+      nozzle equations from one published (thrust, Isp) point, with flow separation (Summerfield, 0.4 × ambient) when the outside air is thicker than
+      the bell was designed for. Thin tanks buckle when the outside pressure beats the tank pressure. Guidance: a gravity turn from orbit on airless
+      worlds, a lifting entry for Starship on Mars, then a vertical velocity profile with hoverslam when the engines can&apos;t throttle low enough.
+      Entry heating is not simulated.
+    </li>
   );
 }
 

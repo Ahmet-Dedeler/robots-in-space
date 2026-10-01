@@ -22,6 +22,7 @@ The mission loop (`mission/run.ts`) talks to a `World`. For Venus that is a pass
 | Vehicle | Scenario | Sim | Reality |
 |---|---|---|---|
 | Pragyan (Chandrayaan-3) | 69°S, lands at dawn | Works ~13.6 days, battery freezes and electronics pass -65 °C within hours of sunset, never wakes | Put to sleep 2 Sep 2023, never woke |
+| Lunokhod 1 (Luna 17) | Mare Imbrium, 330 days | Warm through 6 nights, then colder each month as the Po-210 decays; electronics freeze ~day 306, 10.6 km driven | Last contact day 301, 10.54 km |
 | Yutu-2 (Chang'e 4) | Von Kármán, far side | Sleeps through every night, wakes at each sunrise (3 of 3 in 90 days) | Still waking up after 60+ lunar nights |
 | Curiosity | Gale, Ls 150 | Runs 60 sols on its RTG, also at dust τ 10.8 | Unaffected by the 2018 storm |
 | Opportunity | Meridiani, τ 0.5 | Runs 60 sols | 5,111 sols |

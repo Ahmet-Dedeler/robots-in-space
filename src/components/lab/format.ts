@@ -60,6 +60,6 @@ export const ROLE_SHORT: Record<Role, string> = {
   camera: "Cameras",
   pcm: "Heat sink",
   payload: "Internals",
-  tires: "Tyres",
+  tires: "Tyres/tracks",
   hydraulics: "Hydraulics",
 };

@@ -88,9 +88,11 @@ describe("the Sun and the air", () => {
 
 function mission(id: string, override: Partial<PlanetScenario> = {}, activity: Scenario["activity"] = "walking") {
   const b = vehicleById(id) as VehicleBuild;
-  const planet: PlanetScenario = { chaseSun: false, ...b.home!, ...override };
+  const { maxDays, ...home } = b.home!;
+  const planet: PlanetScenario = { chaseSun: false, ...home, ...override };
   const site = siteById(planet.siteId)!;
-  return runExperiment(b, { elevationM: site.elevationM, ground: site.ground, windMs: 5, start: { kind: "surface" }, activity, planet });
+  const maxDurationS = maxDays ? maxDays * 86_400 : undefined;
+  return runExperiment(b, { elevationM: site.elevationM, ground: site.ground, windMs: 5, start: { kind: "surface" }, activity, planet, maxDurationS });
 }
 
 describe("missions vs history", () => {
@@ -102,6 +104,23 @@ describe("missions vs history", () => {
     expect(days).toBeLessThan(16);
     expect(r.events.some((e) => e.title === "Electronics cold damage")).toBe(true);
     expect(r.events.some((e) => e.title === "Sunrise")).toBe(false);
+  });
+
+  it("Lunokhod 1 outlives its 3-lunar-day design and freezes around day 300 as its Po-210 heater fades (real: day 301)", () => {
+    const r = mission("lunokhod1");
+    expect(r.verdict.deathS).not.toBeNull();
+    const days = r.verdict.deathS! / 86_400;
+    expect(days).toBeGreaterThan(250);
+    expect(days).toBeLessThan(340);
+    expect(r.events.filter((e) => e.title === "Sunrise").length).toBeGreaterThanOrEqual(6);
+    expect(r.events.some((e) => e.title === "Electronics cold damage")).toBe(true);
+  });
+
+  it("IPEx keeps digging through the polar summer day without overheating", () => {
+    const r = mission("ipex");
+    expect(r.verdict.deathS).toBeNull();
+    expect(r.verdict.walkStopS).toBeNull();
+    expect(r.events.some((e) => e.severity === "fail" || e.severity === "fatal")).toBe(false);
   });
 
   it("Yutu-2 sleeps through lunar nights and wakes up every time", () => {

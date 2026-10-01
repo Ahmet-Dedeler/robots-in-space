@@ -4,7 +4,9 @@
  * which.
  */
 import { cToK } from "../constants";
+import { CONSTRUCTION_VEHICLES } from "./construction";
 import { PLANETARY_VEHICLES } from "./planetary";
+import { SPACECRAFT } from "./spacecraft";
 import type { VehicleBuild } from "./types";
 
 const optimus: VehicleBuild = {
@@ -181,10 +183,11 @@ const cat262: VehicleBuild = {
   tagline: "Stock diesel machine. It can't even start.",
   fidelity: "approximation",
   notes: [
-    "Official specs: 3,763 kg operating weight, 2.99 m long (3.71 m with bucket), 2.11 m tall, 1.68 m wide over 12x16.5 tyres, 55.4 kW Cat C3.3B diesel, 1,225 kg rated capacity.",
+    "Cat spec sheet: 3,763 kg operating weight, 1.25 m wheelbase, 2.99 m long (3.71 m with bucket), 2.11 m tall, 1.68 m wide over 12x16.5 tyres, vertical lift to a 3.17 m pin height, 55.4 kW Cat C3.3B diesel, 1,225 kg rated capacity.",
     "Venus air has no oxygen to burn, so the stock diesel cannot run at all. Switch the powerplant to battery-electric to see what else fails.",
     "Assumed: steel frame and panels (quenched & tempered steel), polyester powder-coat paint, rubber tyres, mineral hydraulic oil with nitrile seals, automotive-grade ECU, 12 V lead-acid starter battery.",
-    "Mechanics: a rigid-body skid-steer in MuJoCo with the real footprint and mass on the same Venera heightfield; the lift arms are held by a hydraulic position actuator.",
+    "Mechanics: a rigid-body skid steer in MuJoCo with the real footprint and mass on the same heightfield. Lift arms and bucket tilt are flow-limited hydraulic servos; without pressure they sink under their own weight.",
+    "Electric conversion: 60 kWh pack (the class of today's electric compact loaders, e.g. Bobcat's T7X at 62 kWh).",
   ],
   mechanics: { kind: "wheeled", model: "skidsteer" },
   massKg: 3763,
@@ -206,14 +209,14 @@ const cat262: VehicleBuild = {
     heatFraction: 0.12,
     sizeFactor: 1,
   },
-  tires: { material: "tireRubber", massKg: 180 },
+  tires: { material: "tireRubber", massKg: 180, kind: "tyres" },
   hydraulics: { part: "mineral", massKg: 60 },
-  powerplant: { kind: "diesel", powerKw: 55.4 },
+  powerplant: { kind: "diesel", powerKw: 55.4, electricPackWh: 60_000 },
   payloadMassKg: 0,
   initialTempK: cToK(20),
 };
 
-export const VEHICLES: VehicleBuild[] = [optimus, g1, g1Hardened, cat262, venera13, sealedBox, ...PLANETARY_VEHICLES];
+export const VEHICLES: VehicleBuild[] = [optimus, g1, g1Hardened, cat262, ...CONSTRUCTION_VEHICLES, venera13, sealedBox, ...PLANETARY_VEHICLES, ...SPACECRAFT];
 
 export function vehicleById(id: string): VehicleBuild | undefined {
   return VEHICLES.find((v) => v.id === id);

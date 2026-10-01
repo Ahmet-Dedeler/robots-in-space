@@ -219,6 +219,16 @@ export const PLANET_SITES: PlanetSite[] = [
     note: "Equatorial mare. Noon ground ~120 °C, night ~−180 °C, 14.8 Earth days each (Diviner).",
   },
   {
+    id: "lunokhod1",
+    body: "moon",
+    name: "Lunokhod 1 · Mare Imbrium",
+    latDeg: 38.24,
+    lonDeg: -35.0,
+    elevationM: -2_500,
+    ground: "lunarMare",
+    note: "Where Luna 17 set down the first planetary rover in November 1970. Mid-latitude mare: hot noons, −170 °C nights.",
+  },
+  {
     id: "change4",
     body: "moon",
     name: "Chang'e 4 · Von Kármán crater (far side)",

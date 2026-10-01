@@ -11,6 +11,7 @@ import { create } from "zustand";
 import { runExperiment, type RunResult, type Scenario } from "@/sim/mission/run";
 import { SITES } from "@/sim/env/atmosphere";
 import { BODIES, siteById, sitesFor, type BodyId } from "@/sim/planets/bodies";
+import { DESCENT_FROM_KM } from "@/sim/spacecraft/landing";
 import { VEHICLES, vehicleById } from "@/sim/vehicles/library";
 import type { VehicleBuild } from "@/sim/vehicles/types";
 
@@ -57,7 +58,8 @@ export const clone = <T,>(x: T): T => structuredClone(x);
 export const bodyOf = (s: Scenario): BodyId => s.planet?.body ?? "venus";
 
 export function defaultScenario(build: VehicleBuild, body: BodyId = build.home?.body ?? "venus"): Scenario {
-  const mobile = build.mechanics.kind !== "static";
+  const rocket = build.mechanics.kind === "spacecraft";
+  const mobile = build.mechanics.kind !== "static" && !rocket;
   if (body !== "venus") {
     const home = build.home?.body === body ? build.home : undefined;
     const site = (home && siteById(home.siteId)) || sitesFor(body)[0];
@@ -65,8 +67,9 @@ export function defaultScenario(build: VehicleBuild, body: BodyId = build.home?.
       elevationM: site.elevationM,
       ground: site.ground,
       windMs: body === "mars" ? 5 : 0,
-      start: { kind: "surface" },
+      start: rocket ? { kind: "descent", fromKm: DESCENT_FROM_KM[body] } : { kind: "surface" },
       activity: mobile ? "walking" : "idle",
+      ...(home?.maxDays ? { maxDurationS: home.maxDays * 86_400 } : {}),
       planet: {
         body,
         siteId: site.id,
@@ -77,14 +80,15 @@ export function defaultScenario(build: VehicleBuild, body: BodyId = build.home?.
       },
     };
   }
-  const lander = build.mechanics.kind === "static" && build.descent;
+  const lander = (build.mechanics.kind === "static" && build.descent) || rocket;
   const elevationM = build.homeElevationM ?? 0;
   return {
     elevationM,
     ground: SITES.find((x) => x.elevationM === elevationM)?.ground ?? "venera14",
     windMs: 0.5,
     start: lander ? { kind: "descent", fromKm: 62 } : { kind: "surface" },
-    activity: build.mechanics.kind === "humanoid" ? "walking" : "idle",
+    // Robots walk and machines work by default; landers just sit.
+    activity: build.mechanics.kind === "humanoid" || build.mechanics.kind === "wheeled" ? "walking" : "idle",
   };
 }
 
@@ -93,7 +97,11 @@ export function defaultScenario(build: VehicleBuild, body: BodyId = build.home?.
  * 30 real seconds, but never slower than real time. Humanoids stay near 1x
  * so the walking looks right.
  */
-export function autoWarp(r: RunResult): number {
+export function autoWarp(r: RunResult, t = 0): number {
+  // Rocket landings: show the descent in ~25 s (a lunar descent is 8-12 min, a Venus one ~30-50), then speed up.
+  const f = r.flight;
+  const flightEnd = f?.touchdownS ?? f?.t[f.t.length - 1];
+  if (f && flightEnd !== undefined && t < flightEnd + 8) return Math.max(1, Math.round(Math.min(flightEnd, 3600) / 25));
   // Off Venus the story is day and night: one local day per ~24 s, so sunsets don't strobe.
   // (Humanoids keep the Venus rule so the walking stays watchable.)
   if (r.scenario.planet && r.build.mechanics.kind !== "humanoid") return Math.round(BODIES[r.scenario.planet.body].solarDayS / 24);
@@ -183,7 +191,7 @@ export const useLab = create<LabState>((set, get) => {
     tick(realDt) {
       const { playback, result } = get();
       if (!playback.playing) return;
-      const warp = playback.warp ?? autoWarp(result);
+      const warp = playback.warp ?? autoWarp(result, playback.t);
       const t = playback.t + realDt * warp;
       if (t >= result.durationS) set({ playback: { ...playback, t: result.durationS, playing: false } });
       else set({ playback: { ...playback, t } });

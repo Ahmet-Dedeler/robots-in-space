@@ -29,7 +29,9 @@ import walking from "../data/walking.json";
 import type { TerrainId } from "../terrain/terrain";
 import { buildThermalModel } from "../vehicles/thermal-model";
 import { displacedVolumeM3 } from "../vehicles/volume";
-import type { VehicleBuild } from "../vehicles/types";
+import { runningGear, type VehicleBuild } from "../vehicles/types";
+import { MACHINES } from "../robots/machines";
+import { flightAt, flyLanding, type Flight } from "../spacecraft/landing";
 
 export type Activity = "walking" | "idle";
 
@@ -96,6 +98,8 @@ export interface RunResult {
   events: SimEvent[];
   verdict: Verdict;
   durationS: number;
+  /** Rocket landers: the powered descent (spacecraft/landing.ts). */
+  flight: Flight | null;
   /** Wall-clock compute time [ms]. */
   computeMs: number;
 }
@@ -112,6 +116,20 @@ interface Watch {
 }
 
 export function runExperiment(build: VehicleBuild, scenario: Scenario): RunResult {
+  const t0 = performance.now();
+  const first = runOnce(build, scenario);
+  // A rocket whose flight computer cooks before touchdown can't fly its landing burn.
+  // The descent up to that moment is unchanged, so fly it again with the engines going quiet then.
+  const f = first.flight;
+  const died = first.verdict.deathS;
+  if (f && died !== null && f.destroyedS === null && f.touchdownS !== null && died < f.touchdownS) {
+    const again = runOnce(build, scenario, died);
+    return { ...again, computeMs: performance.now() - t0 };
+  }
+  return { ...first, computeMs: performance.now() - t0 };
+}
+
+function runOnce(build: VehicleBuild, scenario: Scenario, controlLostS?: number): RunResult {
   const t0 = performance.now();
   const battery = BATTERIES[build.battery.part];
   const world = createWorld(build, scenario.elevationM, scenario.planet);
@@ -133,7 +151,18 @@ export function runExperiment(build: VehicleBuild, scenario: Scenario): RunResul
     events.push({ t, severity, title, detail, node });
 
   // ---- State ----------------------------------------------------------------
-  const descending = scenario.start.kind === "descent" && world.allowDescent;
+  // Rocket landers fly their own descent on any world; parachute landers only fall through Venus's air.
+  const descending = scenario.start.kind === "descent" && (world.allowDescent || !!build.propulsion);
+  const flight =
+    descending && build.propulsion
+      ? flyLanding(build, {
+          body: world.body.id,
+          elevationM: scenario.elevationM,
+          fromKm: (scenario.start as { fromKm: number }).fromKm,
+          lsDeg: scenario.planet?.lsDeg,
+          controlLostS,
+        })
+      : null;
   let altitude = descending ? (scenario.start as { fromKm: number }).fromKm * 1000 : scenario.elevationM;
   let landedS: number | null = descending ? null : 0;
   let touchdownMs: number | null = null;
@@ -155,6 +184,9 @@ export function runExperiment(build: VehicleBuild, scenario: Scenario): RunResul
   let coolerOn = false;
   let controllerOkPrev = true;
   let depletedWarned = false;
+  /** Battery ran flat under the motors: they stay off until it's back to 20% (a BMS cut-off). */
+  let motorLockout = false;
+  let dutyCycling = false;
 
   const humanoid = build.mechanics.kind === "humanoid";
   // Planetary rovers drive like the skid steer, minus the MuJoCo model.
@@ -173,6 +205,7 @@ export function runExperiment(build: VehicleBuild, scenario: Scenario): RunResul
       "Diesel engine can't run",
       `No oxygen: ${world.body.id === "venus" ? "Venus air is 96.5% CO2 and 3.5% N2" : world.body.id === "mars" ? "Mars air is 95% CO2 at under 1% of Earth's pressure" : "there is no air at all"}. The ${build.powerplant.powerKw} kW engine can't combust, so the machine can't move; only the starter battery powers the electronics.`,
     );
+  for (const e of flight?.events ?? []) emit(e.t, e.severity, e.title, e.detail);
   if (battery.minOperatingK > build.initialTempK)
     emit(0, "info", "Thermal battery activated", "Pyrotechnic heater melts the salt electrolyte so the battery can run.", "battery");
 
@@ -208,13 +241,16 @@ export function runExperiment(build: VehicleBuild, scenario: Scenario): RunResul
   if (build.camera) watch(CAMERAS[build.camera], R.camera, "Cameras");
   if (build.hydraulics)
     watch(HYDRAULICS[build.hydraulics.part], R.hydraulics, "Hydraulics", () => {
-      emit(tNow, "fail", "Lift arms drop", "Seals leak and the oil cracks: no hydraulic pressure left to hold the arms.", "hydraulics");
+      const m = build.mechanics.kind === "wheeled" ? build.mechanics.model : "skidsteer";
+      const [what, title] = m === "dozer" ? ["blade and ripper", "Blade drops"] : m === "excavator" ? ["boom, stick and bucket", "Boom drops"] : ["arms", "Lift arms drop"];
+      emit(tNow, "fail", title, `Seals leak and the oil cracks: no hydraulic pressure left to hold the ${what}.`, "hydraulics");
     });
   if (build.enclosure.kind === "sealed") watch(SEALS[build.enclosure.seal], R.hull, "Hull seals", () => breach("Seals failed"));
 
   // Events for the outer surface follow the paint if there is one (it fails long before steel does).
   const skinMat = MATERIALS[build.paint ?? build.skin.material];
   const tireMat = build.tires ? MATERIALS[build.tires.material] : undefined;
+  const gearName = runningGear(build);
   let tireWarned = false;
   let skinSoftWarned = false;
   let skinMeltWarned = false;
@@ -263,6 +299,8 @@ export function runExperiment(build: VehicleBuild, scenario: Scenario): RunResul
   let t = 0;
   let env = world.sample(altitude);
   let stopAt = maxT;
+  /** A rocket that dies in the air still falls: keep running until the wreck is down. */
+  const afterFlight = (s: number) => (flight?.touchdownS != null && landedS === null ? Math.max(s, Math.min(maxT, flight.touchdownS + 60)) : s);
 
   const loads = () => {
     const ctrl = electronicsOk && solderOk;
@@ -276,8 +314,14 @@ export function runExperiment(build: VehicleBuild, scenario: Scenario): RunResul
     tNow = t;
     env = world.sample(altitude);
 
+    // Rocket descent: follow the precomputed flight.
+    if (landedS === null && flight) {
+      const f = flightAt(flight, t)!;
+      altitude = scenario.elevationM + f.h;
+      speed = f.speed;
+    }
     // Descent: quasi-steady terminal velocity (drag relaxation takes seconds, the fall takes an hour).
-    if (landedS === null && build.descent) {
+    else if (landedS === null && build.descent) {
       const km = altitude / 1000;
       const stages = build.descent.stages;
       let s = 0;
@@ -296,7 +340,9 @@ export function runExperiment(build: VehicleBuild, scenario: Scenario): RunResul
     const powerSource = batteryOk && batteryWh > 0 && net.T[R.battery ?? 0] >= battery.minOperatingK;
     const solarW = world.solarW(net.T);
     const power = powerSource || (build.rtg?.electricW ?? 0) > 0 || (solarW > 0 && solarW >= build.electronics.powerW);
-    const controller = electronicsOk && solderOk && power;
+    // Crushed or crashed rockets are lost, whatever their avionics are doing.
+    const destroyed = flight?.destroyedS != null && t >= flight.destroyedS;
+    const controller = electronicsOk && solderOk && power && !destroyed;
     // Hibernating is not dead: the controller is fine but switched off for the night.
     const awake = controller && !world.asleep();
     if (magnet && R.motors !== undefined) magnetPeakK = Math.max(magnetPeakK, net.T[R.motors]);
@@ -308,11 +354,19 @@ export function runExperiment(build: VehicleBuild, scenario: Scenario): RunResul
     const walking = mobile && scenario.activity === "walking" && landedS !== null;
     // Blind walking policies trip on rough ground even when healthy (MuJoCo calibration).
     const tripped = walking && gait !== null && !gait.walksAtFull && gait.meanTripS !== null && landedS !== null && t - landedS >= gait.meanTripS;
+    // Motors need energy too: with the battery empty, only what the array/RTG supplies beyond the avionics.
+    const supplyW = (build.rtg?.electricW ?? 0) + solarW;
+    if (motorLockout && batteryWh > 0.2 * build.battery.capacityWh) motorLockout = false;
+    const motorsPowered = (powerSource && !motorLockout) || supplyW >= build.electronics.powerW + (build.motors?.electricW ?? 0);
     const canWalk = humanoid
-      ? awake && frameOk && torque >= walkMin && !tripped
-      : wheeled && awake && engineRuns && frameOk && torque >= 0.3 && world.mobilityOk();
+      ? awake && frameOk && torque >= walkMin && !tripped && motorsPowered
+      : wheeled && awake && engineRuns && frameOk && torque >= 0.3 && world.mobilityOk() && motorsPowered;
 
-    if (controllerOkPrev && !controller && deathS === null) {
+    if (controllerOkPrev && !controller && deathS === null && destroyed) {
+      // The flight already narrated it; let the wreck reach the ground, then a minute more.
+      deathS = t;
+      stopAt = Math.min(maxT, Math.max(t, flight!.touchdownS ?? t) + 60);
+    } else if (controllerOkPrev && !controller && deathS === null) {
       deathS = t;
       const why = !power ? "no power" : !electronicsOk ? "electronics failed" : "solder joints opened";
       const recoverable = world.canRecover && electronicsOk && solderOk;
@@ -320,17 +374,19 @@ export function runExperiment(build: VehicleBuild, scenario: Scenario): RunResul
         emit(t, "warn", "Battery offline while asleep", "Battery too cold or empty to power the receiver and heaters. The array can restart the vehicle at sunrise if nothing freezes first.", "battery");
       else
         emit(t, recoverable ? "fail" : "fatal", recoverable ? "Power lost" : "Controller dead", `Vehicle stops functioning (${why}).${recoverable ? " It may come back when the Sun recharges it." : ""}`);
-      if (!recoverable) stopAt = Math.min(maxT, t + Math.max(300, 0.25 * t));
+      if (!recoverable) stopAt = afterFlight(Math.min(maxT, t + Math.max(300, 0.25 * t)));
     } else if (!controllerOkPrev && controller && deathS !== null) {
       emit(t, "info", "Back online", "Sunlight on the array brought the vehicle back.");
       deathS = null;
     } else if (deathS !== null && !(electronicsOk && solderOk) && stopAt === maxT) {
-      stopAt = Math.min(maxT, t + Math.max(300, 0.25 * t));
+      stopAt = afterFlight(Math.min(maxT, t + Math.max(300, 0.25 * t)));
     }
     controllerOkPrev = controller;
     // Asleep, or joints too cold until the morning warms them: a pause, not the end of driving.
     const pausedForCold = coldFrac < 1 && controller && frameOk;
-    if (mobile && walkStopS === null && !canWalk && landedS !== null && !(controller && world.asleep()) && !pausedForCold) {
+    // Flat battery with the Sun still charging it: a pause, not the end.
+    const pausedForPower = !motorsPowered && controller && supplyW > 0;
+    if (mobile && walkStopS === null && !canWalk && landedS !== null && !(controller && world.asleep()) && !pausedForCold && !pausedForPower) {
       walkStopS = t;
       if (wheeled) {
         const why = !engineRuns ? "the diesel engine cannot run without oxygen" : !controller ? "controller dead" : !frameOk ? "frame yielded" : `drive torque down to ${(torque * 100).toFixed(0)}%`;
@@ -406,12 +462,33 @@ export function runExperiment(build: VehicleBuild, scenario: Scenario): RunResul
     if (net_W > 0 && powerSource) batteryWh = Math.max(0, batteryWh - (net_W * dt) / 3600);
     else if (net_W < 0 && batteryOk && R.battery !== undefined && world.canCharge(net.T[R.battery]))
       batteryWh = Math.min(build.battery.capacityWh, batteryWh - (0.9 * net_W * dt) / 3600);
-    if (batteryWh > 0.2 * build.battery.capacityWh) depletedWarned = false;
-    if (net_W > 0 && powerSource && batteryWh === 0 && !depletedWarned && (depletedWarned = true))
-      emit(t + dt, world.canRecover || (build.rtg?.electricW ?? 0) > 0 ? "warn" : "fatal", "Battery depleted", `Ran out of stored energy.`, "battery");
+    // Duty-cycling on a charger: warn once, not every cycle.
+    if (batteryWh > 0.2 * build.battery.capacityWh && !dutyCycling) depletedWarned = false;
+    const flat = net_W > 0 && powerSource && batteryWh === 0;
+    if (flat && motorW > 0) motorLockout = true;
+    if (flat && !depletedWarned && (depletedWarned = true)) {
+      const charging = supplyW > 0;
+      if (motorW > 0 && charging) dutyCycling = true;
+      emit(
+        t + dt,
+        world.canRecover || (build.rtg?.electricW ?? 0) > 0 ? "warn" : "fatal",
+        "Battery depleted",
+        motorW > 0 && charging
+          ? `Ran out of stored energy. The motors wait until the pack is back to 20%, then work again: from here on, the ${Math.round(supplyW)} W supply sets how much it can do.`
+          : `Ran out of stored energy.`,
+        "battery",
+      );
+    }
 
     // Descent position.
-    if (landedS === null) {
+    if (landedS === null && flight) {
+      if (flight.touchdownS !== null && t + dt >= flight.touchdownS) {
+        altitude = scenario.elevationM;
+        landedS = flight.touchdownS;
+        touchdownMs = flight.touchdownMs;
+        speed = 0;
+      }
+    } else if (landedS === null) {
       altitude -= speed * dt;
       if (altitude <= scenario.elevationM) {
         altitude = scenario.elevationM;
@@ -425,7 +502,8 @@ export function runExperiment(build: VehicleBuild, scenario: Scenario): RunResul
     t += dt;
     tNow = t;
     const mech = build.mechanics;
-    const groundSpeed = walking && canWalk ? (mech.kind === "rover" ? mech.speedMs * mech.dutyCycle : (gait?.metersPerS ?? 0.5)) : 0;
+    const groundSpeed =
+      walking && canWalk ? (mech.kind === "rover" ? mech.speedMs * mech.dutyCycle : mech.kind === "wheeled" ? MACHINES[mech.model].avgSpeedMs : (gait?.metersPerS ?? 0.5)) : 0;
     world.advance(dt, groundSpeed, controller, (sev, title, detail, node) => emit(t, sev, title, detail, node));
     world.checkCold(net.T, (sev, title, detail, node) => emit(t, sev, title, detail, node));
 
@@ -479,11 +557,23 @@ export function runExperiment(build: VehicleBuild, scenario: Scenario): RunResul
       const Tt = net.T[R.tires];
       if (!tireWarned && tireMat.maxServiceK && Tt > tireMat.maxServiceK) {
         tireWarned = true;
-        emit(t, "warn", "Tyres softening", `${tireMat.name} past ${kToC(tireMat.maxServiceK).toFixed(0)} °C: rubber reverts, pressure climbs.`, "tires");
+        emit(
+          t,
+          "warn",
+          `${gearName} softening`,
+          `${tireMat.name} past ${kToC(tireMat.maxServiceK).toFixed(0)} °C: ${tireMat.kind === "metal" ? "the steel loses strength but keeps rolling" : gearName === "Tracks" ? "the rubber reverts and the lugs start to tear" : "rubber reverts, pressure climbs"}.`,
+          "tires",
+        );
       }
       if (tireMat.decomposeK && Tt > tireMat.decomposeK) {
         tiresOk = false;
-        emit(t, "fail", "Tyres pyrolysing", `Rubber decomposes above ${kToC(tireMat.decomposeK).toFixed(0)} °C; the tyres collapse onto the steel rims.`, "tires");
+        emit(
+          t,
+          "fail",
+          `${gearName} pyrolysing`,
+          `Rubber decomposes above ${kToC(tireMat.decomposeK).toFixed(0)} °C; ${gearName === "Tracks" ? "it falls off the steel cords and the machine settles onto its bare rollers" : "the tyres collapse onto the steel rims"}.`,
+          "tires",
+        );
       }
     }
     if (build.enclosure.kind === "sealed" && !breached && R.hull !== undefined) {
@@ -502,7 +592,7 @@ export function runExperiment(build: VehicleBuild, scenario: Scenario): RunResul
     // Adaptive step: aim for <=1 K change per step; tight during descent.
     const target = 1.0;
     const grow = maxDelta > 0 ? Math.min(2, Math.max(0.3, target / maxDelta)) : 2;
-    const cap = landedS === null ? 2 : 600;
+    const cap = landedS === null ? (flight ? 0.5 : 2) : 600;
     dt = Math.min(cap, Math.max(0.02, dt * grow));
     if (t + dt > stopAt) dt = Math.max(0.02, stopAt - t);
   }
@@ -526,9 +616,14 @@ export function runExperiment(build: VehicleBuild, scenario: Scenario): RunResul
       landedS,
       touchdownMs,
       firstFailure,
-      headline: headline(build, deathS, walkStopS, landedS, t) + world.summary(),
+      headline: flight
+        ? flight.destroyedS !== null || flight.touchdownS === null
+          ? flight.summary
+          : `${flight.summary} ${headline(build, deathS, walkStopS, landedS, t)}${world.summary()}`
+        : headline(build, deathS, walkStopS, landedS, t) + world.summary(),
     },
     durationS: t,
+    flight,
     computeMs: performance.now() - t0,
   };
 }
@@ -559,7 +654,7 @@ function headline(b: VehicleBuild, death: number | null, walkStop: number | null
   if (death === null) return `${b.name} is still working after ${formatDuration(end)}.`;
   if (landed === null || death < landed) return `${b.name} died during descent, ${formatDuration(death)} after the start.`;
   const alive = formatDuration(onSurface(death));
-  const moved = b.mechanics.kind === "wheeled" || b.mechanics.kind === "rover" ? "Drove" : "Walked";
+  const moved = b.mechanics.kind === "wheeled" && b.mechanics.model === "excavator" ? "Worked" : b.mechanics.kind === "wheeled" || b.mechanics.kind === "rover" ? "Drove" : "Walked";
   if (walkStop !== null && walkStop <= (landed ?? 0) + 0.5 && b.mechanics.kind === "wheeled") return `Never moved; electronics dead after ${alive}.`;
   if (walkStop !== null && walkStop < death) return `${moved} for ${formatDuration(onSurface(walkStop))}, dead after ${alive} on the surface.`;
   return `Survived ${alive} on the surface.`;
