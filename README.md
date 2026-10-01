@@ -1,6 +1,6 @@
 # Robots in Space Simulator
 
-What survives on Venus, the Moon, Mars or Mercury, and for how long? **Try it: [venus-lab.vercel.app](https://venus-lab.vercel.app)**
+What survives on Venus, the Moon, Mars or Mercury, and for how long? **Try it: [robots-in-space.vercel.app](https://robots-in-space.vercel.app)**
 
 A browser sandbox for robots on other worlds. Pick something real (a Unitree G1, an Optimus-class humanoid, the Venera 13 lander, Curiosity, Opportunity, Yutu-2, Pragyan) or build your own. Put it on the surface, and watch it walk, drive, cook, freeze, sag and die, with a timeline of exactly what failed first.
 
