@@ -6,9 +6,9 @@ const geistSans = Geist({ variable: "--font-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Venus Lab",
+  title: "Robots in Space Simulator",
   description:
-    "Drop real robots, landers and your own designs onto Venus and watch what fails first. Real atmosphere data, real-gas CO₂, thermal soak, material limits and MuJoCo physics in the browser.",
+    "Drop real robots, rovers, landers and your own designs onto Venus, the Moon, Mars or Mercury and watch what fails first, and when. Real atmosphere and regolith data, day/night cycles, thermal soak, material limits and MuJoCo physics in the browser.",
 };
 
 export const viewport: Viewport = { themeColor: "#120e0b", colorScheme: "dark" };

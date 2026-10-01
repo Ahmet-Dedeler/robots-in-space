@@ -8,9 +8,9 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 <!-- END:nextjs-agent-rules -->
 
-# Venus Lab
+# Robots in Space Simulator
 
-Browser sandbox for physics experiments on Venus: drop a robot, lander or custom build onto the surface (or descend from 62 km) and see what fails and when. Not a textbook: every screen is an experiment with a verdict. The Moon, Mars and Mercury run through the same loop (see `docs/planets.md`).
+Browser sandbox for physics experiments on other worlds: drop a robot, rover, lander or custom build onto Venus, the Moon, Mars or Mercury (or descend through Venus's atmosphere from 62 km) and see what fails and when. Not a textbook: every screen is an experiment with a verdict. Venus specifics are in `docs/plan.md`, the other worlds in `docs/planets.md`.
 
 ## Layout
 

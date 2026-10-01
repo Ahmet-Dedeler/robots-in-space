@@ -1,6 +1,6 @@
 # Third-party notices
 
-Venus Lab's own code is MIT licensed (see `LICENSE`). It includes or derives data from:
+Robots in Space Simulator's own code is MIT licensed (see `LICENSE`). It includes or derives data from:
 
 | What | Where | Source | License |
 |---|---|---|---|

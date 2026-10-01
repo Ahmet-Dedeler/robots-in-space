@@ -27,7 +27,7 @@ export function Lab() {
     <div className="flex h-dvh flex-col bg-background text-foreground">
       <header className="flex h-11 shrink-0 items-center justify-between border-b border-white/5 px-4">
         <div className="flex items-baseline gap-3">
-          <span className="text-sm font-semibold tracking-tight text-amber-100">Venus Lab</span>
+          <span className="text-sm font-semibold tracking-tight text-amber-100">Robots in Space Simulator</span>
           <span className="hidden text-xs text-stone-500 sm:inline">What survives on {world.name === "Moon" ? "the Moon" : world.name}, and for how long. Real data, real physics, in your browser.</span>
         </div>
         <span className="font-mono text-[10px] text-stone-600">{world.blurb}</span>

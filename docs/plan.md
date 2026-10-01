@@ -1,4 +1,4 @@
-# Venus Lab: plan
+# Robots in Space Simulator: plan (Venus roadmap; other worlds in planets.md)
 
 A browser sandbox for running experiments on Venus. You pick a thing (Optimus, a CAT truck, Venera 13, a balloon, Starship, or your own build), pick where it goes (surface, descent, cloud layer), run it, and see what happens and when: it walks, it drifts, it overheats, its motors lose torque, its frame sags, its electronics die. It isn't a textbook. The output of every run is a **failure timeline + telemetry**, and runs can be compared and swept.
 

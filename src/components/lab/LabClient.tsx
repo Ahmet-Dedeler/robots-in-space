@@ -11,8 +11,8 @@ export const LabClient = dynamic(() => import("./Lab").then((m) => m.Lab), {
   loading: () => (
     <div className="grid h-dvh place-items-center bg-background">
       <div className="text-center">
-        <div className="text-sm font-semibold text-amber-100">Venus Lab</div>
-        <div className="mt-1 text-xs text-stone-500">Loading the atmosphere…</div>
+        <div className="text-sm font-semibold text-amber-100">Robots in Space Simulator</div>
+        <div className="mt-1 text-xs text-stone-500">Loading the worlds…</div>
       </div>
     </div>
   ),
