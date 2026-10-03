@@ -17,61 +17,113 @@
         "walksAtFull": true,
         "minTorque": 0.79,
         "meanTripS": null,
-        "metersPerS": 0.34
+        "metersPerS": 0.34,
+        "tripCause": null
       },
       "venera13": {
         "walksAtFull": true,
         "minTorque": 0.73,
         "meanTripS": null,
-        "metersPerS": 0.37
+        "metersPerS": 0.37,
+        "tripCause": null
       },
       "venera9": {
         "walksAtFull": false,
         "minTorque": null,
         "meanTripS": 2.5,
-        "metersPerS": 1.05
+        "metersPerS": 1.05,
+        "tripCause": "slope"
       },
       "flat": {
         "walksAtFull": true,
-        "minTorque": 0.66,
+        "minTorque": 0.65,
         "meanTripS": null,
-        "metersPerS": 0.48
+        "metersPerS": 0.48,
+        "tripCause": null
       },
       "lunarMare": {
         "walksAtFull": false,
         "minTorque": null,
-        "meanTripS": 6.6,
-        "metersPerS": 0.37
+        "meanTripS": 8.1,
+        "metersPerS": 0.35,
+        "tripCause": "balance"
       },
       "lunarHighlands": {
         "walksAtFull": false,
         "minTorque": null,
         "meanTripS": 5.7,
-        "metersPerS": 0.41
+        "metersPerS": 0.41,
+        "tripCause": "balance"
+      },
+      "lunarPolar": {
+        "walksAtFull": false,
+        "minTorque": null,
+        "meanTripS": 6.4,
+        "metersPerS": 0.8,
+        "tripCause": "balance"
+      },
+      "lunarShadowed": {
+        "walksAtFull": false,
+        "minTorque": null,
+        "meanTripS": 7,
+        "metersPerS": 0.23,
+        "tripCause": "balance"
+      },
+      "lunarBlocky": {
+        "walksAtFull": false,
+        "minTorque": null,
+        "meanTripS": 6.9,
+        "metersPerS": 0.5,
+        "tripCause": "balance"
       },
       "marsGale": {
         "walksAtFull": false,
         "minTorque": null,
         "meanTripS": 4,
-        "metersPerS": 0.86
+        "metersPerS": 0.86,
+        "tripCause": "balance"
       },
       "marsRocky": {
         "walksAtFull": false,
         "minTorque": null,
-        "meanTripS": 5.3,
-        "metersPerS": 0.7
+        "meanTripS": 3.2,
+        "metersPerS": 0.47,
+        "tripCause": "balance"
       },
       "marsMeridiani": {
         "walksAtFull": false,
         "minTorque": null,
         "meanTripS": 2.5,
-        "metersPerS": 0.55
+        "metersPerS": 0.55,
+        "tripCause": "balance"
+      },
+      "marsDust": {
+        "walksAtFull": false,
+        "minTorque": null,
+        "meanTripS": 3,
+        "metersPerS": 0.63,
+        "tripCause": "balance"
+      },
+      "marsSoftSand": {
+        "walksAtFull": false,
+        "minTorque": null,
+        "meanTripS": 3.3,
+        "metersPerS": 0.72,
+        "tripCause": "balance"
       },
       "mercuryPlains": {
         "walksAtFull": false,
         "minTorque": null,
-        "meanTripS": 4.9,
-        "metersPerS": 0.86
+        "meanTripS": 2.4,
+        "metersPerS": 0.45,
+        "tripCause": "balance"
+      },
+      "mercuryShadowed": {
+        "walksAtFull": false,
+        "minTorque": null,
+        "meanTripS": 2.8,
+        "metersPerS": 0.68,
+        "tripCause": "balance"
       }
     },
     "g1": {
@@ -79,61 +131,113 @@
         "walksAtFull": false,
         "minTorque": null,
         "meanTripS": 7.1,
-        "metersPerS": 0.42
+        "metersPerS": 0.42,
+        "tripCause": "obstacle"
       },
       "venera13": {
         "walksAtFull": false,
         "minTorque": null,
         "meanTripS": 1.9,
-        "metersPerS": 0.44
+        "metersPerS": 0.44,
+        "tripCause": "obstacle"
       },
       "venera9": {
         "walksAtFull": false,
         "minTorque": null,
         "meanTripS": 1.9,
-        "metersPerS": 0.41
+        "metersPerS": 0.41,
+        "tripCause": "slope"
       },
       "flat": {
         "walksAtFull": true,
         "minTorque": 0.66,
         "meanTripS": null,
-        "metersPerS": 0.46
+        "metersPerS": 0.46,
+        "tripCause": null
       },
       "lunarMare": {
         "walksAtFull": false,
         "minTorque": null,
-        "meanTripS": 6,
-        "metersPerS": 0.32
+        "meanTripS": 11.1,
+        "metersPerS": 0.26,
+        "tripCause": "balance"
       },
       "lunarHighlands": {
         "walksAtFull": true,
         "minTorque": 0.44,
         "meanTripS": null,
-        "metersPerS": 0.25
+        "metersPerS": 0.25,
+        "tripCause": null
+      },
+      "lunarPolar": {
+        "walksAtFull": false,
+        "minTorque": null,
+        "meanTripS": 6.5,
+        "metersPerS": 0.27,
+        "tripCause": "balance"
+      },
+      "lunarShadowed": {
+        "walksAtFull": false,
+        "minTorque": null,
+        "meanTripS": 3.8,
+        "metersPerS": 0.25,
+        "tripCause": "balance"
+      },
+      "lunarBlocky": {
+        "walksAtFull": false,
+        "minTorque": null,
+        "meanTripS": 13.7,
+        "metersPerS": 0.26,
+        "tripCause": "obstacle"
       },
       "marsGale": {
         "walksAtFull": false,
         "minTorque": null,
         "meanTripS": 8.8,
-        "metersPerS": 0.43
+        "metersPerS": 0.43,
+        "tripCause": "obstacle"
       },
       "marsRocky": {
         "walksAtFull": false,
         "minTorque": null,
-        "meanTripS": 14.9,
-        "metersPerS": 0.39
+        "meanTripS": 4.3,
+        "metersPerS": 0.47,
+        "tripCause": "obstacle"
       },
       "marsMeridiani": {
         "walksAtFull": true,
         "minTorque": 0.35,
         "meanTripS": null,
-        "metersPerS": 0.4
+        "metersPerS": 0.4,
+        "tripCause": null
+      },
+      "marsDust": {
+        "walksAtFull": true,
+        "minTorque": 0.35,
+        "meanTripS": null,
+        "metersPerS": 0.33,
+        "tripCause": null
+      },
+      "marsSoftSand": {
+        "walksAtFull": true,
+        "minTorque": 0.53,
+        "meanTripS": null,
+        "metersPerS": 0.38,
+        "tripCause": null
       },
       "mercuryPlains": {
-        "walksAtFull": true,
-        "minTorque": 0.31,
-        "meanTripS": null,
-        "metersPerS": 0.39
+        "walksAtFull": false,
+        "minTorque": null,
+        "meanTripS": 7.4,
+        "metersPerS": 0.38,
+        "tripCause": "balance"
+      },
+      "mercuryShadowed": {
+        "walksAtFull": false,
+        "minTorque": null,
+        "meanTripS": 13.7,
+        "metersPerS": 0.39,
+        "tripCause": "balance"
       }
     },
     "g1-hardened": {
@@ -141,61 +245,113 @@
         "walksAtFull": false,
         "minTorque": null,
         "meanTripS": 2.2,
-        "metersPerS": 0.75
+        "metersPerS": 0.75,
+        "tripCause": "obstacle"
       },
       "venera13": {
         "walksAtFull": false,
         "minTorque": null,
         "meanTripS": 2.9,
-        "metersPerS": 0.76
+        "metersPerS": 0.76,
+        "tripCause": "balance"
       },
       "venera9": {
         "walksAtFull": false,
         "minTorque": null,
         "meanTripS": 1.6,
-        "metersPerS": 0.38
+        "metersPerS": 0.38,
+        "tripCause": "slope"
       },
       "flat": {
         "walksAtFull": true,
         "minTorque": 0.91,
         "meanTripS": null,
-        "metersPerS": 0.6
+        "metersPerS": 0.62,
+        "tripCause": null
       },
       "lunarMare": {
         "walksAtFull": true,
-        "minTorque": 0.31,
+        "minTorque": 0.72,
         "meanTripS": null,
-        "metersPerS": 0.39
+        "metersPerS": 0.35,
+        "tripCause": null
       },
       "lunarHighlands": {
         "walksAtFull": false,
         "minTorque": null,
         "meanTripS": 10.1,
-        "metersPerS": 0.24
+        "metersPerS": 0.24,
+        "tripCause": "balance"
+      },
+      "lunarPolar": {
+        "walksAtFull": false,
+        "minTorque": null,
+        "meanTripS": 4.3,
+        "metersPerS": 0.21,
+        "tripCause": "balance"
+      },
+      "lunarShadowed": {
+        "walksAtFull": true,
+        "minTorque": 0.31,
+        "meanTripS": null,
+        "metersPerS": 0.26,
+        "tripCause": null
+      },
+      "lunarBlocky": {
+        "walksAtFull": false,
+        "minTorque": null,
+        "meanTripS": 11.4,
+        "metersPerS": 0.23,
+        "tripCause": "balance"
       },
       "marsGale": {
         "walksAtFull": true,
         "minTorque": 0.98,
         "meanTripS": null,
-        "metersPerS": 0.41
+        "metersPerS": 0.41,
+        "tripCause": null
       },
       "marsRocky": {
-        "walksAtFull": true,
-        "minTorque": 0.41,
-        "meanTripS": null,
-        "metersPerS": 0.44
+        "walksAtFull": false,
+        "minTorque": null,
+        "meanTripS": 4.1,
+        "metersPerS": 0.36,
+        "tripCause": "obstacle"
       },
       "marsMeridiani": {
         "walksAtFull": true,
         "minTorque": 0.49,
         "meanTripS": null,
-        "metersPerS": 0.44
+        "metersPerS": 0.44,
+        "tripCause": null
+      },
+      "marsDust": {
+        "walksAtFull": true,
+        "minTorque": 0.49,
+        "meanTripS": null,
+        "metersPerS": 0.34,
+        "tripCause": null
+      },
+      "marsSoftSand": {
+        "walksAtFull": true,
+        "minTorque": 0.8,
+        "meanTripS": null,
+        "metersPerS": 0.4,
+        "tripCause": null
       },
       "mercuryPlains": {
-        "walksAtFull": true,
-        "minTorque": 0.41,
-        "meanTripS": null,
-        "metersPerS": 0.44
+        "walksAtFull": false,
+        "minTorque": null,
+        "meanTripS": 13.4,
+        "metersPerS": 0.46,
+        "tripCause": "slope"
+      },
+      "mercuryShadowed": {
+        "walksAtFull": false,
+        "minTorque": null,
+        "meanTripS": 14.8,
+        "metersPerS": 0.38,
+        "tripCause": "balance"
       }
     }
   }

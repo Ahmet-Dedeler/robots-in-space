@@ -17,6 +17,7 @@ import walkingJson from "../src/sim/data/walking.json";
 import { BODIES, sitesFor } from "../src/sim/planets/bodies";
 import { surfaceMedium } from "../src/sim/planets/world";
 import { RobotWorld, type FileProvider } from "../src/sim/robots/robot-world";
+import { FallWatch, type FallKind } from "../src/sim/robots/trip";
 import { TERRAINS, terrain, type TerrainId } from "../src/sim/terrain/terrain";
 import { VEHICLES } from "../src/sim/vehicles/library";
 import { displacedVolumeM3 } from "../src/sim/vehicles/volume";
@@ -34,8 +35,8 @@ async function main() {
   const atm = atmosphere(0);
   const venus = { gravity: atm.gravity, densityKgM3: atm.densityKgM3, viscosity: atm.gas.mu, windMs: 0.5 };
   const only = process.env.ONLY?.split(",");
-  type Gait = { walksAtFull: boolean; minTorque: number | null; meanTripS: number | null; metersPerS: number };
-  const out: Record<string, Record<string, Gait>> = only ? structuredClone(walkingJson.results as Record<string, Record<string, Gait>>) : {};
+  type Gait = { walksAtFull: boolean; minTorque: number | null; meanTripS: number | null; metersPerS: number; tripCause: FallKind | null };
+  const out: Record<string, Record<string, Gait>> = only ? structuredClone(walkingJson.results as unknown as Record<string, Record<string, Gait>>) : {};
   /** Gravity and gas for a terrain: its world's, at that world's first listed site. */
   const mediumFor = (tid: TerrainId) => {
     const body = (TERRAINS[tid] as { body?: keyof typeof BODIES }).body;
@@ -66,25 +67,28 @@ async function main() {
           }),
         ),
       );
-      /** Runs every seed; returns whether all stayed up, mean time to trip, walking speed. */
+      /** Runs every seed; returns whether all stayed up, mean time to trip, walking speed, and why they fell. */
       const trial = (scale: number, stopEarly = true) => {
         let ok = true;
         let tripSum = 0;
         let trips = 0;
         let path = 0;
         let time = 0;
+        const causes: Partial<Record<FallKind, number>> = {};
         for (const w of worlds) {
           w.reset();
-          const t0 = w.options.terrain;
-          const stand = w.pelvis.z - t0.height(0, 0);
+          // Same fall rule as before (pelvis below 55% of standing height), plus what was under the feet.
+          const watch = new FallWatch(w);
           let last = w.pelvis;
           for (let t = 0; t < SECONDS; t += 0.02) {
             w.advance(0.02, { torqueScale: scale, plasticScale: 1, command: COMMAND });
             const p = w.pelvis;
-            if (p.z - t0.height(p.x, p.y) < stand * 0.55) {
+            const fall = watch.update(0.02, 1);
+            if (fall) {
               ok = false;
               tripSum += t;
               trips++;
+              causes[fall.kind] = (causes[fall.kind] ?? 0) + 1;
               break;
             }
             path += Math.hypot(p.x - last.x, p.y - last.y);
@@ -93,7 +97,8 @@ async function main() {
           }
           if (!ok && stopEarly) break;
         }
-        return { ok, meanTripS: trips ? tripSum / trips : null, metersPerS: time > 0 ? path / time : 0 };
+        const top = (Object.entries(causes) as [FallKind, number][]).sort((a, b) => b[1] - a[1])[0];
+        return { ok, meanTripS: trips ? tripSum / trips : null, metersPerS: time > 0 ? path / time : 0, tripCause: top ? top[0] : null, causes };
       };
       const full = trial(Math.min(1, v.motors ? v.motors.sizeFactor * (v.motors.magnet === "none" ? 0.7 : 1) : 1), false);
       let minTorque: number | null = null;
@@ -112,13 +117,14 @@ async function main() {
         minTorque,
         meanTripS: full.meanTripS === null ? null : Math.round(full.meanTripS * 10) / 10,
         metersPerS: Math.round(full.metersPerS * 100) / 100,
+        tripCause: full.tripCause,
       };
       console.log(
         v.id.padEnd(12),
         tid.padEnd(15),
         full.ok
           ? `walks ${full.metersPerS.toFixed(2)} m/s, falls below ${Math.round(minTorque! * 100)}% torque`
-          : `trips after ~${full.meanTripS!.toFixed(1)} s on average (${full.metersPerS.toFixed(2)} m/s while up)`,
+          : `trips after ~${full.meanTripS!.toFixed(1)} s on average (${full.metersPerS.toFixed(2)} m/s while up); causes ${JSON.stringify(full.causes)}`,
       );
       worlds.forEach((w) => w.dispose());
     }

@@ -11,6 +11,7 @@ import { MATERIALS } from "@/sim/materials/materials";
 import { formatDuration, type RunResult } from "@/sim/mission/run";
 import { CapabilityChart, TemperatureChart } from "./Charts";
 import { FIDELITY_HINT, FidelityBadge } from "./controls";
+import { GroundPanel } from "./GroundPanel";
 import { SEVERITY_STYLE, fmtClock } from "./format";
 import { Sweep } from "./Sweep";
 import { PlanetModelNotes } from "./PlanetNotes";
@@ -181,7 +182,7 @@ function Notes() {
           <li>Heat: a lumped thermal network (skin, frame, hull, electronics, battery, motors, heat sink) with natural + forced convection correlations and radiation. Correlations are good to about ±20%.</li>
           <li>Failures: datasheet temperature limits per part; magnet torque from remanence loss; frame strength from yield-vs-temperature curves; hull buckling and yield.</li>
           <li>Walking: the real Unitree policy in MuJoCo (WASM) with Venus gravity, 65 kg/m³ CO₂, wind and buoyancy (added by hand: MuJoCo&apos;s fluid model has none), bodies scaled to the spec mass. Torque is scaled live by the thermal model.</li>
-          <li>Ground: generated from the Venera 9/13/14 panoramas (layered basalt plates, sediment, boulder talus). The same height function is the collision heightfield, so feet and wheels hit what you see.</li>
+          <li>Ground: generated from the Venera 9/13/14 panoramas (layered basalt plates, sediment, boulder talus). The same height function is the collision heightfield, so feet and wheels hit what you see. The Ground tab and the hazard map show what&apos;s there; when the robot falls, the view marks the rock it caught or says it fell on open ground.</li>
           <li>Bending: thighs and shins are split by elastic-perfectly-plastic hinges whose plastic moment follows the frame&apos;s hot yield strength, so limbs bend and stay bent.</li>
           <li>Optics: spectral Rayleigh extinction of CO₂ at the local density, cloud-deck Mie extinction, diffuse-only light (no direct sunbeam reaches the surface).</li>
           <li>Descent: quasi-steady terminal velocity through the VIRA density profile.</li>
@@ -219,11 +220,15 @@ export function ResultsPanel() {
         <TabsList variant="line" className="w-full justify-start gap-1 border-b border-white/5 px-3">
           <TabsTrigger value="timeline">Timeline</TabsTrigger>
           <TabsTrigger value="charts">Telemetry</TabsTrigger>
+          <TabsTrigger value="ground">Ground</TabsTrigger>
           <TabsTrigger value="sweep">Sweep</TabsTrigger>
           <TabsTrigger value="notes">Model</TabsTrigger>
         </TabsList>
         <TabsContent value="timeline" className="p-2">
           <Timeline />
+        </TabsContent>
+        <TabsContent value="ground" className="p-4">
+          <GroundPanel />
         </TabsContent>
         <TabsContent value="charts" className="space-y-4 p-4">
           {result.flight && <FlightCharts result={result} />}

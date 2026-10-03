@@ -9,7 +9,7 @@
 import { useLab, bodyOf } from "@/lib/lab-store";
 import { cn } from "@/lib/utils";
 import { BODIES, siteById, sitesFor, type BodyId } from "@/sim/planets/bodies";
-import { sunAt, terminatorSpeed } from "@/sim/planets/solar";
+import { clockForLocalHour, sunAt, terminatorSpeed } from "@/sim/planets/solar";
 import { fmtHour, type PlanetScenario } from "@/sim/planets/world";
 import { TERRAINS, terrainsFor, type TerrainId } from "@/sim/terrain/terrain";
 import type { VehicleBuild } from "@/sim/vehicles/types";
@@ -88,7 +88,9 @@ export function PlanetSiteSection() {
   const setPlanet = (p: Partial<PlanetScenario>) => updateScenario({ planet: { ...planet, ...p } });
   const mech = build.mechanics;
   const mobile = mech.kind !== "static" && mech.kind !== "spacecraft";
-  const sun = sunAt({ body, site, lsDeg: planet.lsDeg }, 0);
+  const clock = { body, site, lsDeg: planet.lsDeg };
+  // Sun at the chosen start hour (clock time 0 is local midnight).
+  const sun = sunAt(clock, clockForLocalHour(clock, planet.localHour));
   const speed = mech.kind === "rover" ? mech.speedMs : mech.kind === "humanoid" ? 0.5 : mech.kind === "wheeled" ? 0.5 : 0;
   const vTerm = terminatorSpeed({ body, site, lsDeg: planet.lsDeg });
 

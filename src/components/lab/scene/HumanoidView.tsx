@@ -21,6 +21,8 @@ import { surfaceMedium } from "@/sim/planets/world";
 import { stateAt } from "@/sim/mission/run";
 import type { MjModel } from "@mujoco/mujoco";
 import { RobotWorld, type FileProvider } from "@/sim/robots/robot-world";
+import { FallWatch } from "@/sim/robots/trip";
+import { useGroundView } from "@/lib/ground-view";
 import { displacedVolumeM3 } from "@/sim/vehicles/volume";
 import { loadMujoco } from "../mujoco";
 import { useTerrain } from "./useScene";
@@ -111,6 +113,8 @@ const browserFiles: FileProvider = {
 /** Everything the frame loop mutates lives here, outside React state. */
 interface Runtime {
   world: RobotWorld;
+  /** Diagnoses why the robot went down (shown in the viewport, marker on the ground). */
+  watch: FallWatch;
   meshes: RigMesh[];
   wasAlive: boolean;
   lastReset: number;
@@ -176,6 +180,7 @@ export function HumanoidView({
         const rig = buildMeshes(world.model, finish, uniforms);
         runtime.current = {
           world,
+          watch: new FallWatch(world),
           meshes: rig.meshes,
           wasAlive: true,
           lastReset: useLab.getState().playback.resetToken,
@@ -192,6 +197,7 @@ export function HumanoidView({
       cancelled = true;
       runtime.current?.world.dispose();
       runtime.current = null;
+      useGroundView.getState().setFall(null);
       setGroup(null);
     };
   }, [robot, finish, gravity, gasDensity, gasViscosity, windMs, massKg, volume, loadFraction, terrain, onReady, uniforms]);
@@ -208,6 +214,8 @@ export function HumanoidView({
     if (rt.lastReset !== playback.resetToken || (alive && !rt.wasAlive)) {
       rt.lastReset = playback.resetToken;
       world.reset();
+      rt.watch.reset();
+      useGroundView.getState().setFall(null);
       drips.current?.clear();
       plume.current?.clear();
     }
@@ -221,6 +229,8 @@ export function HumanoidView({
         plasticScale: st.frameYieldFraction,
         command: config.scenario.activity === "walking" ? WALK : STAND,
       });
+      const fall = rt.watch.update(Math.min(delta, 0.1), alive ? st.torqueFraction : 0);
+      if (fall) useGroundView.getState().setFall(fall);
     }
 
     // Copy MuJoCo poses (Z-up) into the three.js meshes; parent group rotates to Y-up.
